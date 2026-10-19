@@ -1,0 +1,6 @@
+{
+  "name": "DNS Switcher",
+  "description": "Switch Private DNS between AdGuard, Cloudflare, Quad9, and Automatic from Android Quick Settings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
