@@ -79,8 +79,23 @@ class ExampleRobolectricTest {
         assertEquals(DnsProvider.ADGUARD, DnsProvider.fromSpecifier("hostname", "dns.adguard.com"))
         assertEquals(DnsProvider.ADGUARD, DnsProvider.fromSpecifier("hostname", "dns.adguard-dns.com"))
         assertEquals(DnsProvider.CLOUDFLARE, DnsProvider.fromSpecifier("hostname", "one.one.one.one"))
+        assertEquals(DnsProvider.CLOUDFLARE, DnsProvider.fromSpecifier("hostname", "1.1.1.1"))
+        assertEquals(DnsProvider.CLOUDFLARE, DnsProvider.fromSpecifier("hostname", "1.0.0.1"))
+        assertEquals(DnsProvider.CLOUDFLARE, DnsProvider.fromSpecifier("hostname", "1dot1dot1dot1.cloudflare-dns.com"))
         assertEquals(DnsProvider.QUAD9, DnsProvider.fromSpecifier("hostname", "dns.quad9.net"))
+        assertEquals(DnsProvider.QUAD9, DnsProvider.fromSpecifier("hostname", "9.9.9.9"))
         assertEquals(DnsProvider.AUTOMATIC, DnsProvider.fromSpecifier("opportunistic", ""))
+    }
+
+    @Test
+    fun `verify hostname normalization handles URLs and IPs`() {
+        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("1.1.1.1"))
+        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("one.one.one.one"))
+        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("cloudflare"))
+        assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("adguard"))
+        assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("https://dns.adguard.com/dns-query"))
+        assertEquals("dns.quad9.net", com.example.manager.PrivateDnsHelper.normalizeHostname("dns.quad9.net:853"))
+        assertEquals("dns.quad9.net", com.example.manager.PrivateDnsHelper.normalizeHostname("9.9.9.9"))
     }
 
     @Test
@@ -126,5 +141,30 @@ class ExampleRobolectricTest {
     fun `verify MainActivity launches without crash`() {
         val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
         assertNotNull(controller.get())
+    }
+
+    @Test
+    fun `verify DnsDiagnosticRunner resolves localhost successfully`() = kotlinx.coroutines.runBlocking {
+        val result = com.example.manager.DnsDiagnosticRunner.testDnsResolution(
+            targetDomain = "localhost",
+            maxRetries = 1
+        )
+        assertTrue(result is com.example.data.DnsDiagnosticResult.Success)
+        val success = result as com.example.data.DnsDiagnosticResult.Success
+        assertEquals("localhost", success.targetHost)
+        assertTrue(success.latencyMs >= 0)
+    }
+
+    @Test
+    fun `verify DnsDiagnosticRunner handles resolution failure gracefully`() = kotlinx.coroutines.runBlocking {
+        val result = com.example.manager.DnsDiagnosticRunner.testDnsResolution(
+            targetDomain = "invalid.domain.that.does.not.exist.test",
+            maxRetries = 1,
+            retryDelayMs = 10
+        )
+        assertTrue(result is com.example.data.DnsDiagnosticResult.Failure)
+        val failure = result as com.example.data.DnsDiagnosticResult.Failure
+        assertEquals("invalid.domain.that.does.not.exist.test", failure.targetHost)
+        assertTrue(failure.errorMessage.isNotEmpty())
     }
 }

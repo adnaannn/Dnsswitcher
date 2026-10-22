@@ -26,7 +26,7 @@ enum class DnsProvider(
         displayName = "AdGuard DNS",
         hostname = "dns.adguard.com",
         mode = "hostname",
-        description = "Blocks game ads, video popups, web trackers, and malicious phishing domains system-wide.",
+        description = "Blocks game ads, video popups, web trackers, and malicious phishing domains on Wi-Fi and Mobile Data.",
         badge = "Ad-Blocking & Privacy",
         iconRes = R.drawable.ic_shield_adguard
     ),
@@ -35,8 +35,8 @@ enum class DnsProvider(
         displayName = "Cloudflare DNS",
         hostname = "one.one.one.one",
         mode = "hostname",
-        description = "Ultra-fast 1.1.1.1 Private DNS with strict zero-logging privacy protection.",
-        badge = "Fast & Zero-Logging",
+        description = "Ultra-fast 1.1.1.1 Private DNS (one.one.one.one) with strict zero-logging privacy.",
+        badge = "Fast 1.1.1.1 & Zero-Logging",
         iconRes = R.drawable.ic_cloud_cloudflare
     ),
     QUAD9(
@@ -68,13 +68,16 @@ enum class DnsProvider(
                 safeMode == "hostname" -> {
                     when {
                         safeSpecifier.contains("adguard") -> ADGUARD
-                        safeSpecifier == "one.one.one.one" || safeSpecifier.contains("cloudflare") -> CLOUDFLARE
+                        safeSpecifier == "one.one.one.one" ||
+                        safeSpecifier == "1.1.1.1" ||
+                        safeSpecifier == "1.0.0.1" ||
+                        safeSpecifier.contains("cloudflare") -> CLOUDFLARE
                         safeSpecifier.contains("quad9") -> QUAD9
                         safeSpecifier.isEmpty() -> AUTOMATIC
                         else -> {
                             if (safeSpecifier.contains("adguard.com") || safeSpecifier.contains("adguard-dns.com")) ADGUARD
-                            else if (safeSpecifier.contains("one.one.one.one")) CLOUDFLARE
-                            else if (safeSpecifier.contains("quad9.net")) QUAD9
+                            else if (safeSpecifier.contains("one.one.one.one") || safeSpecifier.contains("1.1.1.1")) CLOUDFLARE
+                            else if (safeSpecifier.contains("quad9.net") || safeSpecifier.contains("9.9.9.9")) QUAD9
                             else AUTOMATIC
                         }
                     }

@@ -28,14 +28,15 @@ class DohClient(
             val socket = Socket()
             try {
                 vpnService.protect(socket)
-            } catch (ignored: Exception) {}
+            } catch (e: Exception) {
+                Log.w(TAG, "protect socket failed", e)
+            }
             return socket
         }
 
         override fun createSocket(host: String?, port: Int): Socket {
-            val socket = Socket()
+            val socket = createSocket()
             try {
-                vpnService.protect(socket)
                 if (host != null) {
                     socket.connect(java.net.InetSocketAddress(host, port), 5000)
                 }
@@ -44,12 +45,11 @@ class DohClient(
         }
 
         override fun createSocket(host: String?, port: Int, localHost: InetAddress?, localPort: Int): Socket {
-            val socket = Socket()
+            val socket = createSocket()
             try {
                 if (localHost != null) {
                     socket.bind(java.net.InetSocketAddress(localHost, localPort))
                 }
-                vpnService.protect(socket)
                 if (host != null) {
                     socket.connect(java.net.InetSocketAddress(host, port), 5000)
                 }
@@ -58,9 +58,8 @@ class DohClient(
         }
 
         override fun createSocket(host: InetAddress?, port: Int): Socket {
-            val socket = Socket()
+            val socket = createSocket()
             try {
-                vpnService.protect(socket)
                 if (host != null) {
                     socket.connect(java.net.InetSocketAddress(host, port), 5000)
                 }
@@ -69,12 +68,11 @@ class DohClient(
         }
 
         override fun createSocket(address: InetAddress?, port: Int, localAddress: InetAddress?, localPort: Int): Socket {
-            val socket = Socket()
+            val socket = createSocket()
             try {
                 if (localAddress != null) {
                     socket.bind(java.net.InetSocketAddress(localAddress, localPort))
                 }
-                vpnService.protect(socket)
                 if (address != null) {
                     socket.connect(java.net.InetSocketAddress(address, port), 5000)
                 }
@@ -86,16 +84,17 @@ class DohClient(
     // Bootstrap DNS resolver prevents circular DNS resolution for DoH endpoints
     private val bootstrapDns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
-            return when (hostname) {
-                "dns.adguard.com", "dns.adguard-dns.com" -> listOf(
+            val clean = hostname.trim().lowercase()
+            return when {
+                clean.contains("adguard") -> listOf(
                     InetAddress.getByAddress(hostname, byteArrayOf(94.toByte(), 140.toByte(), 14.toByte(), 14.toByte())),
                     InetAddress.getByAddress(hostname, byteArrayOf(94.toByte(), 140.toByte(), 15.toByte(), 15.toByte()))
                 )
-                "cloudflare-dns.com", "one.one.one.one" -> listOf(
+                clean == "1.1.1.1" || clean == "1.0.0.1" || clean == "one.one.one.one" || clean.contains("cloudflare") -> listOf(
                     InetAddress.getByAddress(hostname, byteArrayOf(1, 1, 1, 1)),
                     InetAddress.getByAddress(hostname, byteArrayOf(1, 0, 0, 1))
                 )
-                "dns.quad9.net" -> listOf(
+                clean.contains("quad9") -> listOf(
                     InetAddress.getByAddress(hostname, byteArrayOf(9, 9, 9, 9)),
                     InetAddress.getByAddress(hostname, byteArrayOf(149.toByte(), 112.toByte(), 112.toByte(), 112.toByte()))
                 )

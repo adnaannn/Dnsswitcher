@@ -38,6 +38,7 @@ object PrivateDnsHelper {
     // Known provider hostnames
     const val HOSTNAME_ADGUARD = "dns.adguard.com"
     const val HOSTNAME_CLOUDFLARE = "one.one.one.one"
+    const val HOSTNAME_CLOUDFLARE_IP = "1.1.1.1"
     const val HOSTNAME_QUAD9 = "dns.quad9.net"
 
     /**
@@ -63,7 +64,9 @@ object PrivateDnsHelper {
                     isOff -> "DNS Off"
                     isHostnameMode -> when {
                         cleanSpecifier.contains("adguard") -> "AdGuard DNS"
-                        cleanSpecifier == "one.one.one.one" || cleanSpecifier.contains("cloudflare") -> "Cloudflare DNS"
+                        cleanSpecifier == "one.one.one.one" ||
+                        cleanSpecifier == "1.1.1.1" ||
+                        cleanSpecifier.contains("cloudflare") -> "Cloudflare DNS"
                         cleanSpecifier.contains("quad9") -> "Quad9 DNS"
                         cleanSpecifier.isNotEmpty() -> cleanSpecifier
                         else -> "Automatic"
@@ -71,6 +74,36 @@ object PrivateDnsHelper {
                     else -> "Automatic"
                 }
             }
+    }
+
+    /**
+     * Normalizes and sanitizes a Private DNS hostname.
+     * Strips URL schemes, ports, and resolves aliases (e.g. "1.1.1.1" -> "one.one.one.one").
+     */
+    fun normalizeHostname(raw: String): String {
+        var clean = raw.trim().lowercase()
+        // Strip URL schemes if user pasted a DoH/DoT URL
+        clean = clean.removePrefix("https://")
+            .removePrefix("http://")
+            .removePrefix("tls://")
+            .removePrefix("dot://")
+            .removePrefix("dns://")
+
+        // Strip path or port suffixes
+        if (clean.contains("/")) {
+            clean = clean.substringBefore("/")
+        }
+        if (clean.contains(":") && !clean.contains("::")) {
+            clean = clean.substringBefore(":")
+        }
+
+        // Map known aliases or IP literals to official TLS SNI hostnames
+        return when {
+            clean == "1.1.1.1" || clean == "1.0.0.1" || clean == "cloudflare" || clean == "1dot1dot1dot1.cloudflare-dns.com" -> HOSTNAME_CLOUDFLARE
+            clean == "adguard" || clean == "dns.adguard-dns.com" || clean == "dns.adguard.com" -> HOSTNAME_ADGUARD
+            clean == "quad9" || clean == "9.9.9.9" || clean == "149.112.112.112" -> HOSTNAME_QUAD9
+            else -> clean
+        }
     }
 
     /**
@@ -128,6 +161,29 @@ object PrivateDnsHelper {
     }
 
     /**
+     * Actively instructs Android's ConnectivityService / NetworkMonitor to re-probe
+     * and validate the active network(s). This forces netd to initiate DoT TLS handshake
+     * and unblocks network traffic on Wi-Fi and Mobile Data immediately.
+     */
+    fun triggerNetworkRevalidation(context: Context) {
+        try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
+            val activeNetwork = cm.activeNetwork
+            if (activeNetwork != null) {
+                cm.reportNetworkConnectivity(activeNetwork, true)
+            }
+            cm.allNetworks.forEach { network ->
+                try {
+                    cm.reportNetworkConnectivity(network, true)
+                } catch (ignored: Exception) {}
+            }
+            Log.d(TAG, "Triggered network revalidation on active networks")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not report network connectivity revalidation", e)
+        }
+    }
+
+    /**
      * Applies a new Private DNS configuration to Settings.Global and immediately verifies
      * that Android accepted and committed the change.
      *
@@ -153,19 +209,34 @@ object PrivateDnsHelper {
 
         try {
             val targetMode = mode.trim().lowercase()
-            val targetSpecifier = hostname.trim()
+            val targetSpecifier = if (targetMode == MODE_PROVIDER_HOSTNAME) {
+                normalizeHostname(hostname)
+            } else {
+                ""
+            }
 
-            // 1. Write the mode (off, opportunistic, hostname)
-            val modeSuccess = Settings.Global.putString(resolver, PRIVATE_DNS_MODE, targetMode)
+            val modeSuccess: Boolean
+            val specifierSuccess: Boolean
 
-            // 2. Write the specifier hostname
-            val specifierSuccess = Settings.Global.putString(resolver, PRIVATE_DNS_SPECIFIER, targetSpecifier)
+            // CRITICAL ORDER OF OPERATIONS:
+            // When setting strict hostname mode, Android's netd triggers TLS certificate validation
+            // immediately when PRIVATE_DNS_MODE changes to "hostname".
+            // Therefore, PRIVATE_DNS_SPECIFIER MUST be written FIRST so netd never validates against
+            // an empty or stale hostname.
+            // Conversely, when turning off or switching to opportunistic, write mode first, then clear specifier.
+            if (targetMode == MODE_PROVIDER_HOSTNAME) {
+                specifierSuccess = Settings.Global.putString(resolver, PRIVATE_DNS_SPECIFIER, targetSpecifier)
+                modeSuccess = Settings.Global.putString(resolver, PRIVATE_DNS_MODE, targetMode)
+            } else {
+                modeSuccess = Settings.Global.putString(resolver, PRIVATE_DNS_MODE, targetMode)
+                specifierSuccess = Settings.Global.putString(resolver, PRIVATE_DNS_SPECIFIER, "")
+            }
 
             if (!modeSuccess || !specifierSuccess) {
                 return Result.failure(IllegalStateException("Settings.Global returned false when persisting values"))
             }
 
-            // 3. Immediately read back and verify from system
+            // Immediately read back and verify from system
             val verifiedConfig = getCurrentConfig(context)
             val isModeOk = verifiedConfig.mode.equals(targetMode, ignoreCase = true)
             val isSpecifierOk = when (targetMode) {
@@ -173,14 +244,18 @@ object PrivateDnsHelper {
                 else -> true
             }
 
-            return if (isModeOk && isSpecifierOk) {
-                Log.i(TAG, "Private DNS successfully updated to: mode=$targetMode, specifier=$targetSpecifier")
-                Result.success(verifiedConfig)
-            } else {
+            if (!isModeOk || !isSpecifierOk) {
                 val errorMsg = "System verification failed. Read back: mode=${verifiedConfig.mode}, specifier=${verifiedConfig.specifier}"
                 Log.w(TAG, errorMsg)
-                Result.failure(IllegalStateException(errorMsg))
+                return Result.failure(IllegalStateException(errorMsg))
             }
+
+            // Actively trigger network connectivity revalidation so Android ConnectivityService
+            // immediately validates the new DoT server and restores internet on Wi-Fi and Mobile Data
+            triggerNetworkRevalidation(context)
+
+            Log.i(TAG, "Private DNS successfully updated to: mode=$targetMode, specifier=$targetSpecifier")
+            return Result.success(verifiedConfig)
 
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException changing Private DNS", e)
@@ -213,17 +288,24 @@ object PrivateDnsHelper {
     }
 
     /**
-     * Convenience method to set Private DNS to AdGuard DNS (dns.adguard-dns.com).
+     * Convenience method to set Private DNS to AdGuard DNS (dns.adguard.com).
      */
     fun setAdGuard(context: Context): Result<PrivateDnsConfig> {
         return setHostname(context, HOSTNAME_ADGUARD)
     }
 
     /**
-     * Convenience method to set Private DNS to Cloudflare DNS (one.one.one.one).
+     * Convenience method to set Private DNS to Cloudflare DNS (one.one.one.one / 1.1.1.1).
      */
     fun setCloudflare(context: Context): Result<PrivateDnsConfig> {
         return setHostname(context, HOSTNAME_CLOUDFLARE)
+    }
+
+    /**
+     * Convenience method to set Private DNS using Cloudflare IP "1.1.1.1" (automatically normalized).
+     */
+    fun setCloudflareIp(context: Context): Result<PrivateDnsConfig> {
+        return setHostname(context, HOSTNAME_CLOUDFLARE_IP)
     }
 
     /**

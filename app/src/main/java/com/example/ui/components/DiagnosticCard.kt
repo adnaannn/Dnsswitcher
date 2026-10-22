@@ -224,7 +224,7 @@ fun DiagnosticCard(
                         color = Color.White
                     )
                     Text(
-                        text = "Universal DNS query & ad-block verification",
+                        text = "Universal DNS query & connectivity test",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )

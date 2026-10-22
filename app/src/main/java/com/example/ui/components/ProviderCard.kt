@@ -190,8 +190,14 @@ fun ProviderCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    val displayHost = if (provider == DnsProvider.CLOUDFLARE) {
+                        "one.one.one.one (1.1.1.1)"
+                    } else {
+                        provider.hostname
+                    }
+
                     Text(
-                        text = provider.hostname,
+                        text = displayHost,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,

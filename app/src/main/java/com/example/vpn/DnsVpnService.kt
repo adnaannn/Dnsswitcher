@@ -202,6 +202,11 @@ class DnsVpnService : VpnService() {
                 .addRoute(VIRTUAL_DNS_IP, 32)
                 .setBlocking(true)
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setMetered(false)
+            }
+            builder.setUnderlyingNetworks(null)
+
             vpnInterface = builder.establish()
 
             if (vpnInterface == null) {
@@ -379,10 +384,20 @@ class DnsVpnService : VpnService() {
             networkCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     Log.d(TAG, "Underlying network changed/available: $network")
+                    try {
+                        setUnderlyingNetworks(arrayOf(network))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not set underlying network", e)
+                    }
                 }
 
                 override fun onLost(network: Network) {
                     Log.d(TAG, "Underlying network lost: $network")
+                    try {
+                        setUnderlyingNetworks(null)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not reset underlying network", e)
+                    }
                 }
             }
             networkCallback?.let { connectivityManager?.registerNetworkCallback(request, it) }
