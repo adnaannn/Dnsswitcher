@@ -24,9 +24,9 @@ enum class DnsProvider(
     ADGUARD(
         id = "adguard",
         displayName = "AdGuard DNS",
-        hostname = "dns.adguard-dns.com",
+        hostname = "dns.adguard.com",
         mode = "hostname",
-        description = "Blocks advertisements, trackers, phishing, and malicious domains system-wide.",
+        description = "Blocks game ads, video popups, web trackers, and malicious phishing domains system-wide.",
         badge = "Ad-Blocking & Privacy",
         iconRes = R.drawable.ic_shield_adguard
     ),
@@ -44,7 +44,7 @@ enum class DnsProvider(
         displayName = "Quad9 DNS",
         hostname = "dns.quad9.net",
         mode = "hostname",
-        description = "Blocks malware, spyware, and phishing domains with verified threat intelligence.",
+        description = "Blocks malware, spyware, and botnets with threat intelligence from IBM and CERT.",
         badge = "Threat Protection",
         iconRes = R.drawable.ic_shield_quad9
     ),
@@ -72,7 +72,7 @@ enum class DnsProvider(
                         safeSpecifier.contains("quad9") -> QUAD9
                         safeSpecifier.isEmpty() -> AUTOMATIC
                         else -> {
-                            if (safeSpecifier.contains("adguard-dns.com")) ADGUARD
+                            if (safeSpecifier.contains("adguard.com") || safeSpecifier.contains("adguard-dns.com")) ADGUARD
                             else if (safeSpecifier.contains("one.one.one.one")) CLOUDFLARE
                             else if (safeSpecifier.contains("quad9.net")) QUAD9
                             else AUTOMATIC

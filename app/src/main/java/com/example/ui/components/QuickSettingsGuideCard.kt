@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,9 +46,14 @@ fun QuickSettingsGuideCard(
             .testTag("qs_guide_card"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = Color(0xFF0D1424).copy(alpha = 0.7f)
         ),
-        border = CardDefaults.outlinedCardBorder()
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            androidx.compose.ui.graphics.Brush.linearGradient(
+                listOf(Color(0x35FFFFFF), Color(0x10FFFFFF), CyberCyan.copy(alpha = 0.35f))
+            )
+        )
     ) {
         Column(
             modifier = Modifier

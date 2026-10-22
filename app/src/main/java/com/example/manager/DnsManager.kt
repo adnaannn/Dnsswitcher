@@ -1,9 +1,7 @@
 package com.example.manager
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.provider.Settings
 import android.util.Log
 import com.example.data.AppPreferences
@@ -18,9 +16,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 object DnsManager {
     private const val TAG = "DnsManager"
 
-    // System Settings.Global keys for Android Private DNS
-    const val KEY_PRIVATE_DNS_MODE = "private_dns_mode"
-    const val KEY_PRIVATE_DNS_SPECIFIER = "private_dns_specifier"
+    // Forward constant aliases from PrivateDnsHelper
+    const val KEY_PRIVATE_DNS_MODE = PrivateDnsHelper.PRIVATE_DNS_MODE
+    const val KEY_PRIVATE_DNS_SPECIFIER = PrivateDnsHelper.PRIVATE_DNS_SPECIFIER
 
     private val isSwitching = AtomicBoolean(false)
 
@@ -31,34 +29,16 @@ object DnsManager {
     val lastSwitchResultFlow: StateFlow<DnsSwitchResult?> = _lastSwitchResultFlow.asStateFlow()
 
     fun hasSecureSettingsPermission(context: Context): Boolean {
-        return try {
-            val status = context.checkCallingOrSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-            status == PackageManager.PERMISSION_GRANTED
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking WRITE_SECURE_SETTINGS permission", e)
-            false
-        }
+        return PrivateDnsHelper.canWriteSecureSettings(context)
     }
 
     fun getAdbCommand(context: Context): String {
-        return "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
+        return PrivateDnsHelper.getAdbGrantCommand(context)
     }
 
     fun getRawSystemSettings(context: Context): Pair<String?, String?> {
-        val resolver = context.contentResolver
-        val mode = try {
-            Settings.Global.getString(resolver, KEY_PRIVATE_DNS_MODE)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed reading $KEY_PRIVATE_DNS_MODE", e)
-            null
-        }
-        val specifier = try {
-            Settings.Global.getString(resolver, KEY_PRIVATE_DNS_SPECIFIER)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed reading $KEY_PRIVATE_DNS_SPECIFIER", e)
-            null
-        }
-        return Pair(mode, specifier)
+        val config = PrivateDnsHelper.getCurrentConfig(context)
+        return Pair(config.mode, config.specifier)
     }
 
     fun getCurrentProvider(context: Context): DnsProvider {
@@ -118,39 +98,30 @@ object DnsManager {
                 return result
             }
 
-            val resolver = context.contentResolver
+            val helperResult = PrivateDnsHelper.setPrivateDns(
+                context = context,
+                mode = target.mode,
+                hostname = target.hostname
+            )
 
-            // 1. Write mode and specifier
-            Settings.Global.putString(resolver, KEY_PRIVATE_DNS_MODE, target.mode)
-            Settings.Global.putString(resolver, KEY_PRIVATE_DNS_SPECIFIER, target.hostname)
-
-            // 2. Read back immediately to verify the setting actually changed in Android OS
-            val (verifiedMode, verifiedSpecifier) = getRawSystemSettings(context)
-
-            val isModeMatched = verifiedMode.equals(target.mode, ignoreCase = true)
-            val isSpecifierMatched = when (target) {
-                DnsProvider.AUTOMATIC, DnsProvider.OFF -> true
-                DnsProvider.ADGUARD -> verifiedSpecifier?.contains("adguard", ignoreCase = true) == true
-                DnsProvider.CLOUDFLARE -> verifiedSpecifier?.equals("one.one.one.one", ignoreCase = true) == true ||
-                        verifiedSpecifier?.contains("cloudflare", ignoreCase = true) == true
-                DnsProvider.QUAD9 -> verifiedSpecifier?.contains("quad9", ignoreCase = true) == true
-            }
-
-            val result: DnsSwitchResult = if (isModeMatched && isSpecifierMatched) {
+            val result: DnsSwitchResult = if (helperResult.isSuccess) {
+                val config = helperResult.getOrThrow()
                 _currentProviderFlow.value = target
                 AppPreferences.getInstance(context).recordSwitchSuccess(target)
                 DnsTileService.requestTileUpdate(context)
                 DnsSwitchResult.Success(
                     provider = target,
-                    verifiedHostname = verifiedSpecifier ?: target.hostname
+                    verifiedHostname = config.specifier ?: target.hostname
                 )
             } else {
-                val errorMsg = "System verification failed. Mode: $verifiedMode, Hostname: $verifiedSpecifier"
+                val exception = helperResult.exceptionOrNull()
+                val errorMsg = exception?.localizedMessage ?: "Verification failed."
                 AppPreferences.getInstance(context).recordSwitchFailure(errorMsg)
+                val (actualMode, actualSpecifier) = getRawSystemSettings(context)
                 DnsSwitchResult.VerificationFailed(
                     expectedProvider = target,
-                    actualMode = verifiedMode,
-                    actualSpecifier = verifiedSpecifier
+                    actualMode = actualMode,
+                    actualSpecifier = actualSpecifier
                 )
             }
 

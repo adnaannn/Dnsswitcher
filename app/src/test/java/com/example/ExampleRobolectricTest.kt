@@ -26,7 +26,7 @@ class ExampleRobolectricTest {
 
     @Test
     fun `verify DNS providers hostnames and modes`() {
-        assertEquals("dns.adguard-dns.com", DnsProvider.ADGUARD.hostname)
+        assertEquals("dns.adguard.com", DnsProvider.ADGUARD.hostname)
         assertEquals("hostname", DnsProvider.ADGUARD.mode)
 
         assertEquals("one.one.one.one", DnsProvider.CLOUDFLARE.hostname)
@@ -76,6 +76,7 @@ class ExampleRobolectricTest {
     @Test
     fun `verify DnsProvider fromSpecifier resolution`() {
         assertEquals(DnsProvider.OFF, DnsProvider.fromSpecifier("off", ""))
+        assertEquals(DnsProvider.ADGUARD, DnsProvider.fromSpecifier("hostname", "dns.adguard.com"))
         assertEquals(DnsProvider.ADGUARD, DnsProvider.fromSpecifier("hostname", "dns.adguard-dns.com"))
         assertEquals(DnsProvider.CLOUDFLARE, DnsProvider.fromSpecifier("hostname", "one.one.one.one"))
         assertEquals(DnsProvider.QUAD9, DnsProvider.fromSpecifier("hostname", "dns.quad9.net"))
@@ -90,6 +91,35 @@ class ExampleRobolectricTest {
         prefs.engineMode = AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS
         assertEquals(AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS, prefs.engineMode)
         prefs.engineMode = AppPreferences.ENGINE_LOCAL_DNS
+    }
+
+    @Test
+    fun `verify PrivateDnsHelper constants and config model`() {
+        assertEquals("private_dns_mode", com.example.manager.PrivateDnsHelper.PRIVATE_DNS_MODE)
+        assertEquals("private_dns_specifier", com.example.manager.PrivateDnsHelper.PRIVATE_DNS_SPECIFIER)
+        assertEquals("off", com.example.manager.PrivateDnsHelper.MODE_OFF)
+        assertEquals("opportunistic", com.example.manager.PrivateDnsHelper.MODE_OPPORTUNISTIC)
+        assertEquals("hostname", com.example.manager.PrivateDnsHelper.MODE_PROVIDER_HOSTNAME)
+
+        val offConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("off", "")
+        assertTrue(offConfig.isOff)
+        assertEquals("DNS Off", offConfig.providerName)
+
+        val autoConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("opportunistic", "")
+        assertTrue(autoConfig.isOpportunistic)
+        assertEquals("Automatic", autoConfig.providerName)
+
+        val adguardConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("hostname", "dns.adguard-dns.com")
+        assertTrue(adguardConfig.isHostnameMode)
+        assertEquals("AdGuard DNS", adguardConfig.providerName)
+
+        val cloudflareConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("hostname", "one.one.one.one")
+        assertTrue(cloudflareConfig.isHostnameMode)
+        assertEquals("Cloudflare DNS", cloudflareConfig.providerName)
+
+        val quad9Config = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("hostname", "dns.quad9.net")
+        assertTrue(quad9Config.isHostnameMode)
+        assertEquals("Quad9 DNS", quad9Config.providerName)
     }
 
     @Test

@@ -7,6 +7,7 @@ sealed interface DnsDiagnosticResult {
         val latencyMs: Long,
         val targetHost: String,
         val resolvedIp: String,
+        val adBlockingVerified: Boolean = false,
         val timestamp: Long = System.currentTimeMillis()
     ) : DnsDiagnosticResult
 

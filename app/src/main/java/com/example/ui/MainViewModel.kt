@@ -80,14 +80,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshState() {
         val context = getApplication<Application>()
-        _hasSecureSettingsPermission.value = DnsManager.hasSecureSettingsPermission(context)
+        val hasSecPerm = DnsManager.hasSecureSettingsPermission(context)
+        _hasSecureSettingsPermission.value = hasSecPerm
         val (mode, specifier) = DnsManager.getRawSystemSettings(context)
         _rawMode.value = mode
         _rawSpecifier.value = specifier
 
         _isVpnConsentGranted.value = (VpnService.prepare(context) == null)
 
-        if (_engineMode.value == AppPreferences.ENGINE_LOCAL_DNS) {
+        // If WRITE_SECURE_SETTINGS is granted, prioritize native system private DNS
+        if (hasSecPerm) {
+            _engineMode.value = AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS
+            prefs.engineMode = AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS
+            _currentProvider.value = DnsManager.getCurrentProvider(context)
+        } else if (_engineMode.value == AppPreferences.ENGINE_LOCAL_DNS) {
             val isRunning = DnsVpnService.isRunningFlow.value
             _currentProvider.value = if (isRunning) {
                 when (DnsVpnService.currentProfileFlow.value?.id) {
@@ -124,8 +130,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectProvider(provider: DnsProvider) {
         val context = getApplication<Application>()
         viewModelScope.launch {
-            if (_engineMode.value == AppPreferences.ENGINE_LOCAL_DNS) {
-                // Local zero-command mode
+            val hasSecPerm = DnsManager.hasSecureSettingsPermission(context)
+            if (hasSecPerm || _engineMode.value == AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS) {
+                // Ensure no conflicting local VPN is intercepting network traffic
+                DnsVpnService.stopVpn(context)
+
+                val result = DnsManager.applyProvider(context, provider)
+                refreshState()
+                when (result) {
+                    is DnsSwitchResult.Success -> {
+                        Toast.makeText(context, "Active: ${provider.displayName}", Toast.LENGTH_SHORT).show()
+                    }
+                    is DnsSwitchResult.PermissionDenied -> {
+                        Toast.makeText(context, "Permission missing. Switch to No-Command Mode or run ADB.", Toast.LENGTH_LONG).show()
+                    }
+                    is DnsSwitchResult.VerificationFailed -> {
+                        Toast.makeText(context, "Verification failed. System did not accept change.", Toast.LENGTH_LONG).show()
+                    }
+                    is DnsSwitchResult.Error -> {
+                        Toast.makeText(context, "Error: ${result.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                DnsTileService.requestTileUpdate(context)
+            } else {
+                // Local zero-command mode (VpnService)
                 if (VpnService.prepare(context) != null) {
                     _isVpnConsentGranted.value = false
                     Toast.makeText(context, "Please grant VPN permission on screen", Toast.LENGTH_SHORT).show()
@@ -158,25 +186,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 DnsTileService.requestTileUpdate(context)
                 refreshState()
-
-            } else {
-                // System Private DNS mode (requires WRITE_SECURE_SETTINGS)
-                val result = DnsManager.applyProvider(context, provider)
-                refreshState()
-                when (result) {
-                    is DnsSwitchResult.Success -> {
-                        Toast.makeText(context, "Switched to ${provider.displayName}", Toast.LENGTH_SHORT).show()
-                    }
-                    is DnsSwitchResult.PermissionDenied -> {
-                        Toast.makeText(context, "Permission missing. Switch to No-Command Mode or run ADB.", Toast.LENGTH_LONG).show()
-                    }
-                    is DnsSwitchResult.VerificationFailed -> {
-                        Toast.makeText(context, "Verification failed. System did not accept change.", Toast.LENGTH_LONG).show()
-                    }
-                    is DnsSwitchResult.Error -> {
-                        Toast.makeText(context, "Error: ${result.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
             }
         }
     }
@@ -184,7 +193,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun runDnsDiagnostic() {
         viewModelScope.launch {
             _diagnosticResult.value = DnsDiagnosticResult.Testing
-            val result = DnsDiagnosticRunner.testDnsResolution("one.one.one.one")
+            val result = DnsDiagnosticRunner.testDnsResolution()
             _diagnosticResult.value = result
         }
     }

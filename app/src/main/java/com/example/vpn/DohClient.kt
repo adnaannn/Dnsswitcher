@@ -24,10 +24,8 @@ class DohClient(
 
     // Protecting socket factory to ensure outbound DoH sockets bypass the VPN tunnel and avoid loops
     private val protectingSocketFactory = object : SocketFactory() {
-        private val defaultFactory = getDefault()
-
         override fun createSocket(): Socket {
-            val socket = defaultFactory.createSocket()
+            val socket = Socket()
             try {
                 vpnService.protect(socket)
             } catch (ignored: Exception) {}
@@ -35,7 +33,7 @@ class DohClient(
         }
 
         override fun createSocket(host: String?, port: Int): Socket {
-            val socket = defaultFactory.createSocket()
+            val socket = Socket()
             try {
                 vpnService.protect(socket)
                 if (host != null) {
@@ -46,7 +44,7 @@ class DohClient(
         }
 
         override fun createSocket(host: String?, port: Int, localHost: InetAddress?, localPort: Int): Socket {
-            val socket = defaultFactory.createSocket()
+            val socket = Socket()
             try {
                 if (localHost != null) {
                     socket.bind(java.net.InetSocketAddress(localHost, localPort))
@@ -60,7 +58,7 @@ class DohClient(
         }
 
         override fun createSocket(host: InetAddress?, port: Int): Socket {
-            val socket = defaultFactory.createSocket()
+            val socket = Socket()
             try {
                 vpnService.protect(socket)
                 if (host != null) {
@@ -71,7 +69,7 @@ class DohClient(
         }
 
         override fun createSocket(address: InetAddress?, port: Int, localAddress: InetAddress?, localPort: Int): Socket {
-            val socket = defaultFactory.createSocket()
+            val socket = Socket()
             try {
                 if (localAddress != null) {
                     socket.bind(java.net.InetSocketAddress(localAddress, localPort))
@@ -89,7 +87,7 @@ class DohClient(
     private val bootstrapDns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
             return when (hostname) {
-                "dns.adguard-dns.com" -> listOf(
+                "dns.adguard.com", "dns.adguard-dns.com" -> listOf(
                     InetAddress.getByAddress(hostname, byteArrayOf(94.toByte(), 140.toByte(), 14.toByte(), 14.toByte())),
                     InetAddress.getByAddress(hostname, byteArrayOf(94.toByte(), 140.toByte(), 15.toByte(), 15.toByte()))
                 )

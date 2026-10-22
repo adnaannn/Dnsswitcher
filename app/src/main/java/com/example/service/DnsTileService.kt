@@ -78,14 +78,15 @@ class DnsTileService : TileService() {
         }
 
         val prefs = AppPreferences.getInstance(this)
-        val isLocalDnsMode = prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS ||
-                !DnsManager.hasSecureSettingsPermission(this)
+        val hasSecurePerm = DnsManager.hasSecureSettingsPermission(this)
+        val isLocalDnsMode = !hasSecurePerm && (prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS)
 
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 if (isLocalDnsMode) {
                     handleLocalDnsTileTap(prefs)
                 } else {
+                    DnsVpnService.stopVpn(this@DnsTileService)
                     handleSystemDnsTileTap()
                 }
             } catch (e: Exception) {
@@ -197,8 +198,8 @@ class DnsTileService : TileService() {
     private fun refreshTile() {
         val tile = qsTile ?: return
         val prefs = AppPreferences.getInstance(this)
-        val isLocalDnsMode = prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS ||
-                !DnsManager.hasSecureSettingsPermission(this)
+        val hasSecurePerm = DnsManager.hasSecureSettingsPermission(this)
+        val isLocalDnsMode = !hasSecurePerm && (prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS)
 
         if (isLocalDnsMode) {
             val isRunning = DnsVpnService.isRunningFlow.value

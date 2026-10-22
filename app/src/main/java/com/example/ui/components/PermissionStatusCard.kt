@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,25 +69,22 @@ fun PermissionStatusCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag("permission_status_card"),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isGranted) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
-            }
+            containerColor = if (isGranted) Color(0xFF0D1829).copy(alpha = 0.7f) else Color(0xFF1E1018).copy(alpha = 0.7f)
         ),
-        border = if (!isGranted) {
-            CardDefaults.outlinedCardBorder().copy(
-                width = 1.dp,
-                brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-            )
-        } else {
-            CardDefaults.outlinedCardBorder().copy(
-                width = 1.dp,
-                brush = androidx.compose.ui.graphics.SolidColor(AdGuardGreen.copy(alpha = 0.4f))
-            )
-        }
+        border = BorderStroke(
+            1.dp,
+            if (isGranted) {
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(AdGuardGreen.copy(alpha = 0.6f), Color(0x15FFFFFF), AdGuardGreen.copy(alpha = 0.2f))
+                )
+            } else {
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(MaterialTheme.colorScheme.error.copy(alpha = 0.6f), Color(0x15FFFFFF), MaterialTheme.colorScheme.error.copy(alpha = 0.2f))
+                )
+            }
+        )
     ) {
         Column(
             modifier = Modifier
