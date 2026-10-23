@@ -263,15 +263,30 @@ class ExampleRobolectricTest {
     @Test
     fun `verify DnsVpnService dual-stack IPv4 and IPv6 network prefix configurations`() {
         // IPv4 Dual-Stack configuration constants
+        assertEquals("10.111.222.10", com.example.vpn.DnsVpnService.TUN_INTERFACE_IPV4)
         assertEquals("10.111.222.1", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IP)
         assertEquals("10.111.222.0", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_SUBNET)
         assertEquals(24, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_PREFIX)
         assertEquals(32, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_ROUTE_PREFIX)
 
         // IPv6 Dual-Stack configuration constants
+        assertEquals("fd00:1:fd00:1::10", com.example.vpn.DnsVpnService.TUN_INTERFACE_IPV6)
         assertEquals("fd00:1:fd00:1::1", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6)
         assertEquals("fd00:1:fd00:1::", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_SUBNET)
         assertEquals(64, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_PREFIX)
         assertEquals(64, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_ROUTE_PREFIX)
+    }
+
+    @Test
+    fun `verify AdGuard DoH URL uses official dns-query endpoint`() {
+        assertEquals("https://dns.adguard-dns.com/dns-query", com.example.model.DnsProfile.ADGUARD.dohUrl)
+        assertEquals("https://cloudflare-dns.com/dns-query", com.example.model.DnsProfile.CLOUDFLARE.dohUrl)
+        assertEquals("https://dns.quad9.net/dns-query", com.example.model.DnsProfile.QUAD9.dohUrl)
+    }
+
+    @Test
+    fun `verify DnsTileService requestTileUpdate runs without exception`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        com.example.service.DnsTileService.requestTileUpdate(context)
     }
 }

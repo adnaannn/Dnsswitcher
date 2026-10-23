@@ -23,7 +23,7 @@ data class DnsProfile(
         val ADGUARD = DnsProfile(
             id = "adguard",
             name = "AdGuard DNS",
-            dohUrl = "https://dns.adguard.com/dns-query",
+            dohUrl = "https://dns.adguard-dns.com/dns-query",
             bootstrapIps = listOf("94.140.14.14", "94.140.15.15"),
             protocol = "DOH",
             isEnabled = true,

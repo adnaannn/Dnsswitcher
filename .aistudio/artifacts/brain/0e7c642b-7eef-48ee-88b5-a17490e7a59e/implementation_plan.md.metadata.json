@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to resolve internet connectivity loss (exclamation mark on Wi-Fi and mobile data) when connected to AdGuard, Cloudflare, or Quad9 in Zero-Command VPN mode. Addresses underlying network recursive loop, RFC 8484 DNS Transaction ID matching, dual-stack IPv4/IPv6 packet handling, and app self-exclusion.",
-  "updatedAt":  "2026-10-22T09:49:39.248109230Z",
+  "summary":  "Updated implementation plan documenting the resolution of internet dropping during DNS switching, TUN interface dual-stack address separation, and Quick Settings DnsTileService implementation.",
+  "updatedAt":  "2026-10-23T12:13:49.431020570Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.R
 import com.example.data.ProfileRepository
+import com.example.manager.PrivateDnsHelper
 import com.example.model.DnsProfile
 import com.example.service.DnsTileService
 import kotlinx.coroutines.CoroutineScope
@@ -46,11 +47,13 @@ class DnsVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "dns_toggle_vpn_channel"
 
+        const val TUN_INTERFACE_IPV4 = "10.111.222.10"
         const val VIRTUAL_DNS_IP = "10.111.222.1"
         const val VIRTUAL_DNS_IPV4_SUBNET = "10.111.222.0"
         const val VIRTUAL_DNS_IPV4_PREFIX = 24
         const val VIRTUAL_DNS_IPV4_ROUTE_PREFIX = 32
 
+        const val TUN_INTERFACE_IPV6 = "fd00:1:fd00:1::10"
         const val VIRTUAL_DNS_IPV6 = "fd00:1:fd00:1::1"
         const val VIRTUAL_DNS_IPV6_SUBNET = "fd00:1:fd00:1::"
         const val VIRTUAL_DNS_IPV6_PREFIX = 64
@@ -205,12 +208,18 @@ class DnsVpnService : VpnService() {
         try {
             val builder = Builder()
                 .setSession("DNS Toggle")
-                // Dual-stack IPv4 configuration (RFC 1918 private /24 subnet, /32 DNS host route)
-                .addAddress(VIRTUAL_DNS_IP, VIRTUAL_DNS_IPV4_PREFIX)
+                // Dual-stack IPv4 configuration:
+                // TUN interface address is assigned TUN_INTERFACE_IPV4 (10.111.222.10/24).
+                // System DNS server is set to VIRTUAL_DNS_IP (10.111.222.1), with host route /32 directed to TUN.
+                // Having distinct interface and DNS addresses ensures Linux kernel forwards queries to the TUN interface
+                // rather than loopback delivery.
+                .addAddress(TUN_INTERFACE_IPV4, VIRTUAL_DNS_IPV4_PREFIX)
                 .addDnsServer(VIRTUAL_DNS_IP)
                 .addRoute(VIRTUAL_DNS_IP, VIRTUAL_DNS_IPV4_ROUTE_PREFIX)
-                // Dual-stack IPv6 configuration (RFC 4193 ULA /64 prefix, routing virtual DNS subnet)
-                .addAddress(VIRTUAL_DNS_IPV6, VIRTUAL_DNS_IPV6_PREFIX)
+                // Dual-stack IPv6 configuration:
+                // TUN interface address is assigned TUN_INTERFACE_IPV6 (fd00:1:fd00:1::10/64).
+                // System DNS server is set to VIRTUAL_DNS_IPV6 (fd00:1:fd00:1::1), with subnet route /64 directed to TUN.
+                .addAddress(TUN_INTERFACE_IPV6, VIRTUAL_DNS_IPV6_PREFIX)
                 .addDnsServer(VIRTUAL_DNS_IPV6)
                 .addRoute(VIRTUAL_DNS_IPV6_SUBNET, VIRTUAL_DNS_IPV6_ROUTE_PREFIX)
                 .setBlocking(true)
@@ -225,21 +234,8 @@ class DnsVpnService : VpnService() {
                 builder.setMetered(false)
             }
 
-            // Bind to physical non-VPN underlying network or null to prevent recursive VPN loops
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            val physicalNet = cm?.allNetworks?.firstOrNull { net ->
-                val caps = cm.getNetworkCapabilities(net)
-                caps != null &&
-                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
-                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            }
-            if (physicalNet != null) {
-                try {
-                    builder.setUnderlyingNetworks(arrayOf(physicalNet))
-                } catch (ignored: Exception) {}
-            } else {
-                builder.setUnderlyingNetworks(null)
-            }
+            // Allow the system to automatically select and manage the underlying physical network
+            builder.setUnderlyingNetworks(null)
 
             vpnInterface = builder.establish()
 
@@ -251,6 +247,7 @@ class DnsVpnService : VpnService() {
 
             _isRunningFlow.value = true
             DnsTileService.requestTileUpdate(this)
+            PrivateDnsHelper.triggerNetworkRevalidation(this)
 
             serviceScope = CoroutineScope(Dispatchers.IO + Job())
             serviceScope?.launch {
@@ -268,8 +265,10 @@ class DnsVpnService : VpnService() {
     private fun updateActiveProfileInternal(profile: DnsProfile) {
         activeProfile = profile
         _currentProfileFlow.value = profile
+        dohClient?.clearConnectionPool()
         promoteToForeground(profile)
         DnsTileService.requestTileUpdate(this)
+        PrivateDnsHelper.triggerNetworkRevalidation(this)
         Log.i(TAG, "Switched active DNS profile to ${profile.name}")
     }
 
@@ -429,6 +428,16 @@ class DnsVpnService : VpnService() {
                         } catch (e: Exception) {
                             Log.w(TAG, "Could not set underlying network", e)
                         }
+                    }
+                }
+
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    ) {
+                        try {
+                            setUnderlyingNetworks(arrayOf(network))
+                        } catch (ignored: Exception) {}
                     }
                 }
 

@@ -19,6 +19,7 @@ import com.example.data.DnsProvider
 import com.example.data.DnsSwitchResult
 import com.example.data.ProfileRepository
 import com.example.manager.DnsManager
+import com.example.manager.PrivateDnsHelper
 import com.example.vpn.DnsVpnService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +80,7 @@ class DnsTileService : TileService() {
 
         val prefs = AppPreferences.getInstance(this)
         val hasSecurePerm = DnsManager.hasSecureSettingsPermission(this)
-        val isLocalDnsMode = !hasSecurePerm && (prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS)
+        val isLocalDnsMode = (prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS) || !hasSecurePerm
 
         CoroutineScope(Dispatchers.Main).launch {
             try {
@@ -124,14 +125,7 @@ class DnsTileService : TileService() {
             if (prefs.activeLocalProviderId == "automatic") DnsProvider.AUTOMATIC else DnsProvider.OFF
         }
 
-        // Cycle sequence: OFF -> ADGUARD -> CLOUDFLARE -> QUAD9 -> AUTOMATIC -> OFF
-        val nextProvider = when (currentProvider) {
-            DnsProvider.OFF -> DnsProvider.ADGUARD
-            DnsProvider.ADGUARD -> DnsProvider.CLOUDFLARE
-            DnsProvider.CLOUDFLARE -> DnsProvider.QUAD9
-            DnsProvider.QUAD9 -> DnsProvider.AUTOMATIC
-            DnsProvider.AUTOMATIC -> DnsProvider.OFF
-        }
+        val nextProvider = DnsManager.getNextProviderInCycle(this, currentProvider)
 
         prefs.activeLocalProviderId = nextProvider.id
         prefs.recordSwitchSuccess(nextProvider)
@@ -140,11 +134,13 @@ class DnsTileService : TileService() {
             DnsProvider.OFF -> {
                 DnsVpnService.stopVpn(this)
                 updateTileAppearance(qsTile, DnsProvider.OFF)
+                PrivateDnsHelper.triggerNetworkRevalidation(this)
                 postToast("DNS: Off")
             }
             DnsProvider.AUTOMATIC -> {
                 DnsVpnService.stopVpn(this)
                 updateTileAppearance(qsTile, DnsProvider.AUTOMATIC)
+                PrivateDnsHelper.triggerNetworkRevalidation(this)
                 postToast("DNS: Automatic (System Default)")
             }
             DnsProvider.ADGUARD, DnsProvider.CLOUDFLARE, DnsProvider.QUAD9 -> {
@@ -155,6 +151,7 @@ class DnsTileService : TileService() {
                     DnsVpnService.switchProfile(this, profileId)
                 }
                 updateTileAppearance(qsTile, nextProvider)
+                PrivateDnsHelper.triggerNetworkRevalidation(this)
                 postToast("DNS: ${nextProvider.displayName}")
             }
         }
@@ -199,7 +196,7 @@ class DnsTileService : TileService() {
         val tile = qsTile ?: return
         val prefs = AppPreferences.getInstance(this)
         val hasSecurePerm = DnsManager.hasSecureSettingsPermission(this)
-        val isLocalDnsMode = !hasSecurePerm && (prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS)
+        val isLocalDnsMode = (prefs.engineMode == AppPreferences.ENGINE_LOCAL_DNS) || !hasSecurePerm
 
         if (isLocalDnsMode) {
             val isRunning = DnsVpnService.isRunningFlow.value
@@ -233,7 +230,11 @@ class DnsTileService : TileService() {
         tile.state = if (isOff) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (isOff) "Off" else (provider.hostname.ifEmpty { "Active" })
+            tile.subtitle = when (provider) {
+                DnsProvider.OFF -> "Off"
+                DnsProvider.AUTOMATIC -> "System Default"
+                else -> provider.hostname.ifEmpty { "Active" }
+            }
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -241,7 +242,11 @@ class DnsTileService : TileService() {
         }
 
         tile.contentDescription = "DNS Switcher: ${provider.displayName}"
-        tile.icon = Icon.createWithResource(this, provider.iconRes)
+        try {
+            tile.icon = Icon.createWithResource(this, provider.iconRes)
+        } catch (e: Exception) {
+            tile.icon = Icon.createWithResource(this, com.example.R.drawable.ic_tile_dns)
+        }
         tile.updateTile()
     }
 

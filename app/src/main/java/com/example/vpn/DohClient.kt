@@ -108,6 +108,14 @@ class DohClient(
         .retryOnConnectionFailure(true)
         .build()
 
+    fun clearConnectionPool() {
+        try {
+            httpClient.connectionPool.evictAll()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error clearing connection pool", e)
+        }
+    }
+
     fun resolve(queryPayload: ByteArray, profile: DnsProfile): ByteArray? {
         val requestBody = queryPayload.toRequestBody(DOH_MEDIA_TYPE)
         val request = Request.Builder()

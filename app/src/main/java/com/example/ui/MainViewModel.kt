@@ -17,6 +17,7 @@ import com.example.data.DnsProvider
 import com.example.data.DnsSwitchResult
 import com.example.manager.DnsDiagnosticRunner
 import com.example.manager.DnsManager
+import com.example.manager.PrivateDnsHelper
 import com.example.service.DnsTileService
 import com.example.vpn.DnsVpnService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,11 +170,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     DnsProvider.OFF -> {
                         DnsVpnService.stopVpn(context)
                         _currentProvider.value = DnsProvider.OFF
+                        PrivateDnsHelper.triggerNetworkRevalidation(context)
                         Toast.makeText(context, "DNS Off", Toast.LENGTH_SHORT).show()
                     }
                     DnsProvider.AUTOMATIC -> {
                         DnsVpnService.stopVpn(context)
                         _currentProvider.value = DnsProvider.AUTOMATIC
+                        PrivateDnsHelper.triggerNetworkRevalidation(context)
                         Toast.makeText(context, "DNS: Automatic (Network Default)", Toast.LENGTH_SHORT).show()
                     }
                     DnsProvider.ADGUARD, DnsProvider.CLOUDFLARE, DnsProvider.QUAD9 -> {
@@ -183,6 +186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             DnsVpnService.switchProfile(context, provider.id)
                         }
                         _currentProvider.value = provider
+                        PrivateDnsHelper.triggerNetworkRevalidation(context)
                         Toast.makeText(context, "Switched to ${provider.displayName}", Toast.LENGTH_SHORT).show()
                     }
                 }
