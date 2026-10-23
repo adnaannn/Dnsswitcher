@@ -134,6 +134,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (hasSecPerm || _engineMode.value == AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS) {
                 // Ensure no conflicting local VPN is intercepting network traffic
                 DnsVpnService.stopVpn(context)
+                _diagnosticResult.value = DnsDiagnosticResult.Idle
 
                 val result = DnsManager.applyProvider(context, provider)
                 refreshState()
@@ -160,6 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
+                _diagnosticResult.value = DnsDiagnosticResult.Idle
                 prefs.activeLocalProviderId = provider.id
                 prefs.recordSwitchSuccess(provider)
 
@@ -193,7 +195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun runDnsDiagnostic() {
         viewModelScope.launch {
             _diagnosticResult.value = DnsDiagnosticResult.Testing
-            val result = DnsDiagnosticRunner.testDnsResolution()
+            val result = DnsDiagnosticRunner.testDnsResolution(context = getApplication())
             _diagnosticResult.value = result
         }
     }

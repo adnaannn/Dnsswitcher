@@ -36,47 +36,31 @@ class DohClient(
 
         override fun createSocket(host: String?, port: Int): Socket {
             val socket = createSocket()
-            try {
-                if (host != null) {
-                    socket.connect(java.net.InetSocketAddress(host, port), 5000)
-                }
-            } catch (ignored: Exception) {}
+            socket.connect(java.net.InetSocketAddress(host, port))
             return socket
         }
 
         override fun createSocket(host: String?, port: Int, localHost: InetAddress?, localPort: Int): Socket {
             val socket = createSocket()
-            try {
-                if (localHost != null) {
-                    socket.bind(java.net.InetSocketAddress(localHost, localPort))
-                }
-                if (host != null) {
-                    socket.connect(java.net.InetSocketAddress(host, port), 5000)
-                }
-            } catch (ignored: Exception) {}
+            if (localHost != null) {
+                socket.bind(java.net.InetSocketAddress(localHost, localPort))
+            }
+            socket.connect(java.net.InetSocketAddress(host, port))
             return socket
         }
 
         override fun createSocket(host: InetAddress?, port: Int): Socket {
             val socket = createSocket()
-            try {
-                if (host != null) {
-                    socket.connect(java.net.InetSocketAddress(host, port), 5000)
-                }
-            } catch (ignored: Exception) {}
+            socket.connect(java.net.InetSocketAddress(host, port))
             return socket
         }
 
         override fun createSocket(address: InetAddress?, port: Int, localAddress: InetAddress?, localPort: Int): Socket {
             val socket = createSocket()
-            try {
-                if (localAddress != null) {
-                    socket.bind(java.net.InetSocketAddress(localAddress, localPort))
-                }
-                if (address != null) {
-                    socket.connect(java.net.InetSocketAddress(address, port), 5000)
-                }
-            } catch (ignored: Exception) {}
+            if (localAddress != null) {
+                socket.bind(java.net.InetSocketAddress(localAddress, localPort))
+            }
+            socket.connect(java.net.InetSocketAddress(address, port))
             return socket
         }
     }
@@ -86,23 +70,29 @@ class DohClient(
         override fun lookup(hostname: String): List<InetAddress> {
             val clean = hostname.trim().lowercase()
             return when {
-                clean.contains("adguard") -> listOf(
-                    InetAddress.getByAddress(hostname, byteArrayOf(94.toByte(), 140.toByte(), 14.toByte(), 14.toByte())),
-                    InetAddress.getByAddress(hostname, byteArrayOf(94.toByte(), 140.toByte(), 15.toByte(), 15.toByte()))
+                clean.contains("adguard") -> listOfNotNull(
+                    runCatching { InetAddress.getByName("94.140.14.14") }.getOrNull(),
+                    runCatching { InetAddress.getByName("94.140.15.15") }.getOrNull(),
+                    runCatching { InetAddress.getByName("2a10:50c0::ad1:ff") }.getOrNull(),
+                    runCatching { InetAddress.getByName("2a10:50c0::ad2:ff") }.getOrNull()
                 )
-                clean == "1.1.1.1" || clean == "1.0.0.1" || clean == "one.one.one.one" || clean.contains("cloudflare") -> listOf(
-                    InetAddress.getByAddress(hostname, byteArrayOf(1, 1, 1, 1)),
-                    InetAddress.getByAddress(hostname, byteArrayOf(1, 0, 0, 1))
+                clean == "1.1.1.1" || clean == "1.0.0.1" || clean == "one.one.one.one" || clean.contains("cloudflare") -> listOfNotNull(
+                    runCatching { InetAddress.getByName("1.1.1.1") }.getOrNull(),
+                    runCatching { InetAddress.getByName("1.0.0.1") }.getOrNull(),
+                    runCatching { InetAddress.getByName("2606:4700:4700::1111") }.getOrNull(),
+                    runCatching { InetAddress.getByName("2606:4700:4700::1001") }.getOrNull()
                 )
-                clean.contains("quad9") -> listOf(
-                    InetAddress.getByAddress(hostname, byteArrayOf(9, 9, 9, 9)),
-                    InetAddress.getByAddress(hostname, byteArrayOf(149.toByte(), 112.toByte(), 112.toByte(), 112.toByte()))
+                clean.contains("quad9") -> listOfNotNull(
+                    runCatching { InetAddress.getByName("9.9.9.9") }.getOrNull(),
+                    runCatching { InetAddress.getByName("149.112.112.112") }.getOrNull(),
+                    runCatching { InetAddress.getByName("2620:fe::fe") }.getOrNull(),
+                    runCatching { InetAddress.getByName("2620:fe::9") }.getOrNull()
                 )
                 else -> {
                     try {
                         Dns.SYSTEM.lookup(hostname)
                     } catch (e: Exception) {
-                        listOf(InetAddress.getByAddress(hostname, byteArrayOf(1, 1, 1, 1)))
+                        listOfNotNull(runCatching { InetAddress.getByName("1.1.1.1") }.getOrNull())
                     }
                 }
             }

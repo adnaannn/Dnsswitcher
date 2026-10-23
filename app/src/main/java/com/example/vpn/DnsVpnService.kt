@@ -46,7 +46,15 @@ class DnsVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "dns_toggle_vpn_channel"
 
-        private const val VIRTUAL_DNS_IP = "10.111.222.1"
+        const val VIRTUAL_DNS_IP = "10.111.222.1"
+        const val VIRTUAL_DNS_IPV4_SUBNET = "10.111.222.0"
+        const val VIRTUAL_DNS_IPV4_PREFIX = 24
+        const val VIRTUAL_DNS_IPV4_ROUTE_PREFIX = 32
+
+        const val VIRTUAL_DNS_IPV6 = "fd00:1:fd00:1::1"
+        const val VIRTUAL_DNS_IPV6_SUBNET = "fd00:1:fd00:1::"
+        const val VIRTUAL_DNS_IPV6_PREFIX = 64
+        const val VIRTUAL_DNS_IPV6_ROUTE_PREFIX = 64
 
         private val _isRunningFlow = MutableStateFlow(false)
         val isRunningFlow: StateFlow<Boolean> = _isRunningFlow.asStateFlow()
@@ -197,15 +205,41 @@ class DnsVpnService : VpnService() {
         try {
             val builder = Builder()
                 .setSession("DNS Toggle")
-                .addAddress(VIRTUAL_DNS_IP, 24)
+                // Dual-stack IPv4 configuration (RFC 1918 private /24 subnet, /32 DNS host route)
+                .addAddress(VIRTUAL_DNS_IP, VIRTUAL_DNS_IPV4_PREFIX)
                 .addDnsServer(VIRTUAL_DNS_IP)
-                .addRoute(VIRTUAL_DNS_IP, 32)
+                .addRoute(VIRTUAL_DNS_IP, VIRTUAL_DNS_IPV4_ROUTE_PREFIX)
+                // Dual-stack IPv6 configuration (RFC 4193 ULA /64 prefix, routing virtual DNS subnet)
+                .addAddress(VIRTUAL_DNS_IPV6, VIRTUAL_DNS_IPV6_PREFIX)
+                .addDnsServer(VIRTUAL_DNS_IPV6)
+                .addRoute(VIRTUAL_DNS_IPV6_SUBNET, VIRTUAL_DNS_IPV6_ROUTE_PREFIX)
                 .setBlocking(true)
+
+            try {
+                builder.addDisallowedApplication(packageName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not disallow app package from VPN", e)
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setMetered(false)
             }
-            builder.setUnderlyingNetworks(null)
+
+            // Bind to physical non-VPN underlying network or null to prevent recursive VPN loops
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val physicalNet = cm?.allNetworks?.firstOrNull { net ->
+                val caps = cm.getNetworkCapabilities(net)
+                caps != null &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+            if (physicalNet != null) {
+                try {
+                    builder.setUnderlyingNetworks(arrayOf(physicalNet))
+                } catch (ignored: Exception) {}
+            } else {
+                builder.setUnderlyingNetworks(null)
+            }
 
             vpnInterface = builder.establish()
 
@@ -379,22 +413,39 @@ class DnsVpnService : VpnService() {
             connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val request = NetworkRequest.Builder()
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
                 .build()
 
             networkCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    Log.d(TAG, "Underlying network changed/available: $network")
-                    try {
-                        setUnderlyingNetworks(arrayOf(network))
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Could not set underlying network", e)
+                    val caps = connectivityManager?.getNetworkCapabilities(network)
+                    if (caps != null &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    ) {
+                        Log.d(TAG, "Physical underlying network available: $network")
+                        try {
+                            setUnderlyingNetworks(arrayOf(network))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not set underlying network", e)
+                        }
                     }
                 }
 
                 override fun onLost(network: Network) {
                     Log.d(TAG, "Underlying network lost: $network")
                     try {
-                        setUnderlyingNetworks(null)
+                        val remainingPhysical = connectivityManager?.allNetworks?.firstOrNull { net ->
+                            val caps = connectivityManager?.getNetworkCapabilities(net)
+                            caps != null &&
+                                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        }
+                        if (remainingPhysical != null) {
+                            setUnderlyingNetworks(arrayOf(remainingPhysical))
+                        } else {
+                            setUnderlyingNetworks(null)
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Could not reset underlying network", e)
                     }

@@ -92,7 +92,9 @@ class ExampleRobolectricTest {
         assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("1.1.1.1"))
         assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("one.one.one.one"))
         assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("cloudflare"))
+        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("cloud fare 1.1.1.1"))
         assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("adguard"))
+        assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("dns.adguard.com"))
         assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("https://dns.adguard.com/dns-query"))
         assertEquals("dns.quad9.net", com.example.manager.PrivateDnsHelper.normalizeHostname("dns.quad9.net:853"))
         assertEquals("dns.quad9.net", com.example.manager.PrivateDnsHelper.normalizeHostname("9.9.9.9"))
@@ -166,5 +168,110 @@ class ExampleRobolectricTest {
         val failure = result as com.example.data.DnsDiagnosticResult.Failure
         assertEquals("invalid.domain.that.does.not.exist.test", failure.targetHost)
         assertTrue(failure.errorMessage.isNotEmpty())
+    }
+
+    @Test
+    fun `verify DnsPacketParser parses IPv4 DNS query and preserves transaction ID in response`() {
+        val queryDnsPayload = byteArrayOf(0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+        val rawIpv4Packet = ByteArray(20 + 8 + queryDnsPayload.size)
+        rawIpv4Packet[0] = 0x45.toByte() // IPv4, header len 20
+        rawIpv4Packet[9] = 17.toByte() // UDP
+        // Source IP 10.0.0.5
+        System.arraycopy(byteArrayOf(10, 0, 0, 5), 0, rawIpv4Packet, 12, 4)
+        // Dest IP 10.111.222.1
+        System.arraycopy(byteArrayOf(10, 111, 222.toByte(), 1), 0, rawIpv4Packet, 16, 4)
+        // UDP Src Port 12345
+        rawIpv4Packet[20] = (12345 ushr 8).toByte()
+        rawIpv4Packet[21] = (12345 and 0xFF).toByte()
+        // UDP Dst Port 53
+        rawIpv4Packet[22] = 0
+        rawIpv4Packet[23] = 53
+        // UDP Length 20
+        rawIpv4Packet[24] = 0
+        rawIpv4Packet[25] = 20
+        // DNS Payload
+        System.arraycopy(queryDnsPayload, 0, rawIpv4Packet, 28, queryDnsPayload.size)
+
+        val query = com.example.vpn.DnsPacketParser.parseUdpDnsQuery(rawIpv4Packet, rawIpv4Packet.size)
+        assertNotNull(query)
+        assertEquals(false, query?.isIpv6)
+        assertEquals(12345, query?.sourcePort)
+        assertEquals(53, query?.destPort)
+
+        // Simulate DoH response where server returned ID 0x0000 (RFC 8484 standard behavior)
+        val dohResponsePayload = byteArrayOf(0x00, 0x00, 0x81.toByte(), 0x80.toByte(), 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00)
+        val responsePacket = com.example.vpn.DnsPacketParser.buildUdpDnsResponse(query!!, dohResponsePayload)
+
+        assertTrue(responsePacket.size > 28)
+        // Check destination IP in response matches original source IP
+        assertEquals(10.toByte(), responsePacket[16])
+        assertEquals(0.toByte(), responsePacket[17])
+        assertEquals(0.toByte(), responsePacket[18])
+        assertEquals(5.toByte(), responsePacket[19])
+        // Check destination port in response matches original source port
+        val respDstPort = ((responsePacket[22].toInt() and 0xFF) shl 8) or (responsePacket[23].toInt() and 0xFF)
+        assertEquals(12345, respDstPort)
+        // Check transaction ID in returned DNS payload has been restored to 0x1234
+        assertEquals(0x12.toByte(), responsePacket[28])
+        assertEquals(0x34.toByte(), responsePacket[29])
+    }
+
+    @Test
+    fun `verify DnsPacketParser parses IPv6 DNS query and builds valid IPv6 UDP response`() {
+        val queryDnsPayload = byteArrayOf(0xAB.toByte(), 0xCD.toByte(), 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+        val rawIpv6Packet = ByteArray(40 + 8 + queryDnsPayload.size)
+        rawIpv6Packet[0] = 0x60.toByte() // IPv6
+        rawIpv6Packet[6] = 17.toByte() // Next Header: UDP
+        // Source IPv6 fd00::5
+        rawIpv6Packet[8] = 0xFD.toByte()
+        rawIpv6Packet[23] = 0x05
+        // Dest IPv6 fd00:1:fd00:1::1
+        rawIpv6Packet[24] = 0xFD.toByte()
+        rawIpv6Packet[39] = 0x01
+        // UDP Src Port 54321
+        rawIpv6Packet[40] = (54321 ushr 8).toByte()
+        rawIpv6Packet[41] = (54321 and 0xFF).toByte()
+        // UDP Dst Port 53
+        rawIpv6Packet[42] = 0
+        rawIpv6Packet[43] = 53
+        // UDP Length 20
+        rawIpv6Packet[44] = 0
+        rawIpv6Packet[45] = 20
+        // DNS Payload
+        System.arraycopy(queryDnsPayload, 0, rawIpv6Packet, 48, queryDnsPayload.size)
+
+        val query = com.example.vpn.DnsPacketParser.parseUdpDnsQuery(rawIpv6Packet, rawIpv6Packet.size)
+        assertNotNull(query)
+        assertEquals(true, query?.isIpv6)
+        assertEquals(54321, query?.sourcePort)
+        assertEquals(53, query?.destPort)
+
+        val dohResponsePayload = byteArrayOf(0x00, 0x00, 0x81.toByte(), 0x80.toByte(), 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00)
+        val responsePacket = com.example.vpn.DnsPacketParser.buildUdpDnsResponse(query!!, dohResponsePayload)
+
+        assertTrue(responsePacket.size >= 48)
+        // IPv6 version 6
+        assertEquals(0x60.toByte(), responsePacket[0])
+        // Destination port is 54321
+        val respDstPort = ((responsePacket[42].toInt() and 0xFF) shl 8) or (responsePacket[43].toInt() and 0xFF)
+        assertEquals(54321, respDstPort)
+        // Transaction ID is restored to 0xABCD
+        assertEquals(0xAB.toByte(), responsePacket[48])
+        assertEquals(0xCD.toByte(), responsePacket[49])
+    }
+
+    @Test
+    fun `verify DnsVpnService dual-stack IPv4 and IPv6 network prefix configurations`() {
+        // IPv4 Dual-Stack configuration constants
+        assertEquals("10.111.222.1", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IP)
+        assertEquals("10.111.222.0", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_SUBNET)
+        assertEquals(24, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_PREFIX)
+        assertEquals(32, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_ROUTE_PREFIX)
+
+        // IPv6 Dual-Stack configuration constants
+        assertEquals("fd00:1:fd00:1::1", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6)
+        assertEquals("fd00:1:fd00:1::", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_SUBNET)
+        assertEquals(64, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_PREFIX)
+        assertEquals(64, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_ROUTE_PREFIX)
     }
 }

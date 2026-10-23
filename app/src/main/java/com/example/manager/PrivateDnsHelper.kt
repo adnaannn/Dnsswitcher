@@ -99,9 +99,10 @@ object PrivateDnsHelper {
 
         // Map known aliases or IP literals to official TLS SNI hostnames
         return when {
-            clean == "1.1.1.1" || clean == "1.0.0.1" || clean == "cloudflare" || clean == "1dot1dot1dot1.cloudflare-dns.com" -> HOSTNAME_CLOUDFLARE
-            clean == "adguard" || clean == "dns.adguard-dns.com" || clean == "dns.adguard.com" -> HOSTNAME_ADGUARD
-            clean == "quad9" || clean == "9.9.9.9" || clean == "149.112.112.112" -> HOSTNAME_QUAD9
+            clean == "1.1.1.1" || clean == "1.0.0.1" || clean == "cloudflare" || clean == "cloud fare" ||
+            clean.contains("cloudflare") || clean.contains("cloud fare") || clean == "1dot1dot1dot1.cloudflare-dns.com" -> HOSTNAME_CLOUDFLARE
+            clean == "adguard" || clean == "dns.adguard-dns.com" || clean == "dns.adguard.com" || clean.contains("adguard") -> HOSTNAME_ADGUARD
+            clean == "quad9" || clean == "9.9.9.9" || clean == "149.112.112.112" || clean.contains("quad9") -> HOSTNAME_QUAD9
             else -> clean
         }
     }
@@ -170,14 +171,17 @@ object PrivateDnsHelper {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
             val activeNetwork = cm.activeNetwork
             if (activeNetwork != null) {
+                // Signal NetworkMonitor to force a re-evaluation probe on the active connection
+                cm.reportNetworkConnectivity(activeNetwork, false)
                 cm.reportNetworkConnectivity(activeNetwork, true)
             }
             cm.allNetworks.forEach { network ->
                 try {
+                    cm.reportNetworkConnectivity(network, false)
                     cm.reportNetworkConnectivity(network, true)
                 } catch (ignored: Exception) {}
             }
-            Log.d(TAG, "Triggered network revalidation on active networks")
+            Log.d(TAG, "Triggered network revalidation probe on active networks")
         } catch (e: Exception) {
             Log.w(TAG, "Could not report network connectivity revalidation", e)
         }
@@ -236,12 +240,26 @@ object PrivateDnsHelper {
                 return Result.failure(IllegalStateException("Settings.Global returned false when persisting values"))
             }
 
-            // Immediately read back and verify from system
-            val verifiedConfig = getCurrentConfig(context)
-            val isModeOk = verifiedConfig.mode.equals(targetMode, ignoreCase = true)
-            val isSpecifierOk = when (targetMode) {
+            // Immediately read back and verify from system with retry loop to absorb Settings provider latency
+            var verifiedConfig = getCurrentConfig(context)
+            var isModeOk = verifiedConfig.mode.equals(targetMode, ignoreCase = true)
+            var isSpecifierOk = when (targetMode) {
                 MODE_PROVIDER_HOSTNAME -> verifiedConfig.specifier.equals(targetSpecifier, ignoreCase = true)
                 else -> true
+            }
+
+            var verifyAttempts = 0
+            while ((!isModeOk || !isSpecifierOk) && verifyAttempts < 3) {
+                try {
+                    Thread.sleep(60)
+                } catch (ignored: InterruptedException) {}
+                verifiedConfig = getCurrentConfig(context)
+                isModeOk = verifiedConfig.mode.equals(targetMode, ignoreCase = true)
+                isSpecifierOk = when (targetMode) {
+                    MODE_PROVIDER_HOSTNAME -> verifiedConfig.specifier.equals(targetSpecifier, ignoreCase = true)
+                    else -> true
+                }
+                verifyAttempts++
             }
 
             if (!isModeOk || !isSpecifierOk) {
