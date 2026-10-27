@@ -69,6 +69,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _themeMode = MutableStateFlow(prefs.themeMode)
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
+    private val updateManager = com.example.updater.AppUpdateManager(application)
+    val updateStatus = updateManager.updateStatus
+    val currentVersionCode = updateManager.currentVersionCode
+    val currentVersionName = updateManager.currentVersionName
+
+    private val _customUpdateUrl = MutableStateFlow(prefs.customUpdateUrl)
+    val customUpdateUrl: StateFlow<String> = _customUpdateUrl.asStateFlow()
+
     val adbCommand: String
         get() = DnsManager.getAdbCommand(getApplication())
 
@@ -240,4 +248,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun checkForUpdates(customUrl: String? = null) {
+        viewModelScope.launch {
+            updateManager.checkForUpdates(customUrl)
+        }
+    }
+
+    fun downloadUpdate(info: com.example.updater.UpdateInfo) {
+        viewModelScope.launch {
+            updateManager.downloadUpdate(info)
+        }
+    }
+
+    fun installUpdate(apkFile: java.io.File) {
+        val result = updateManager.installApk(apkFile)
+        when (result) {
+            is com.example.updater.AppUpdateManager.InstallResult.Started -> {
+                Toast.makeText(getApplication(), "Opening Package Installer...", Toast.LENGTH_SHORT).show()
+            }
+            is com.example.updater.AppUpdateManager.InstallResult.PermissionRequired -> {
+                Toast.makeText(getApplication(), "Please allow installation from this source", Toast.LENGTH_LONG).show()
+            }
+            is com.example.updater.AppUpdateManager.InstallResult.FileNotFound -> {
+                Toast.makeText(getApplication(), "Downloaded APK file not found", Toast.LENGTH_SHORT).show()
+            }
+            is com.example.updater.AppUpdateManager.InstallResult.Error -> {
+                Toast.makeText(getApplication(), "Error: ${result.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun triggerSimulatedUpdate() {
+        updateManager.triggerSimulatedUpdate()
+    }
+
+    fun saveCustomUpdateUrl(url: String) {
+        prefs.customUpdateUrl = url
+        _customUpdateUrl.value = url
+    }
 }
+

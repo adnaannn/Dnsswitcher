@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,13 +31,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -52,6 +56,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -70,7 +75,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.AppPreferences
 import com.example.data.DnsProvider
 import com.example.manager.DnsManager
+import com.example.ui.components.AmbientGlowOrb
+import com.example.ui.components.AppUpdaterCard
 import com.example.ui.components.DiagnosticCard
+import com.example.ui.components.FrostedGlassCard
+import com.example.ui.components.ModeExplainerCard
 import com.example.ui.components.PermissionStatusCard
 import com.example.ui.components.ProviderCard
 import com.example.ui.components.QuickSettingsGuideCard
@@ -92,7 +101,6 @@ fun MainScreen(
     val engineMode by viewModel.engineMode.collectAsState()
     val currentProvider by viewModel.currentProvider.collectAsState()
     val isVpnConsentGranted by viewModel.isVpnConsentGranted.collectAsState()
-    val isVpnRunning by viewModel.isVpnRunning.collectAsState()
     val hasPermission by viewModel.hasSecureSettingsPermission.collectAsState()
     val rawMode by viewModel.rawMode.collectAsState()
     val rawSpecifier by viewModel.rawSpecifier.collectAsState()
@@ -101,7 +109,10 @@ fun MainScreen(
     val diagnosticResult by viewModel.diagnosticResult.collectAsState()
     val cycleMode by viewModel.cycleMode.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val updateStatus by viewModel.updateStatus.collectAsState()
+    val customUpdateUrl by viewModel.customUpdateUrl.collectAsState()
 
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showSettingsSheet by remember { mutableStateOf(false) }
 
     // Launcher for standard on-screen Android VPN permission dialog
@@ -139,47 +150,41 @@ fun MainScreen(
         label = "activeAccentColor"
     )
 
-    // Liquid Glass Root Container
+    // Android 17 Frosted Glass Canvas
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF060911),
-                        Color(0xFF0A1020),
-                        Color(0xFF04060C)
+                        Color(0xFF060913),
+                        Color(0xFF0A1022),
+                        Color(0xFF03050A)
                     )
                 )
             )
     ) {
-        // Ambient Liquid Glow Meshes
-        Box(
-            modifier = Modifier
-                .size(320.dp)
-                .offset(x = (-40).dp, y = (-20).dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            activeAccentColor.copy(alpha = 0.18f),
-                            Color.Transparent
-                        )
-                    )
-                )
+        // Ambient Liquid Glow Mesh Orbs with Android 17 Blur
+        AmbientGlowOrb(
+            color = activeAccentColor,
+            size = 340.dp,
+            offsetX = (-50).dp,
+            offsetY = (-30).dp,
+            alpha = 0.22f
         )
-        Box(
-            modifier = Modifier
-                .size(280.dp)
-                .align(Alignment.TopEnd)
-                .offset(x = 60.dp, y = 140.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            CyberCyan.copy(alpha = 0.10f),
-                            Color.Transparent
-                        )
-                    )
-                )
+        AmbientGlowOrb(
+            color = CyberCyan,
+            size = 300.dp,
+            offsetX = 200.dp,
+            offsetY = 160.dp,
+            alpha = 0.14f
+        )
+        AmbientGlowOrb(
+            color = Color(0xFF6366F1),
+            size = 280.dp,
+            offsetX = (-20).dp,
+            offsetY = 520.dp,
+            alpha = 0.10f
         )
 
         Scaffold(
@@ -192,13 +197,13 @@ fun MainScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(38.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         Brush.linearGradient(
                                             listOf(
-                                                activeAccentColor.copy(alpha = 0.35f),
-                                                Color(0x15FFFFFF)
+                                                activeAccentColor.copy(alpha = 0.40f),
+                                                Color(0x20FFFFFF)
                                             )
                                         )
                                     ),
@@ -208,14 +213,14 @@ fun MainScreen(
                                     imageVector = Icons.Default.Shield,
                                     contentDescription = null,
                                     tint = activeAccentColor,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "DNS Switcher",
                                 style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.5.sp
                                 ),
                                 color = Color.White
@@ -257,380 +262,578 @@ fun MainScreen(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item { Spacer(modifier = Modifier.height(2.dp)) }
+                item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                // Operating Mode Selector (Liquid Glass Pills)
+                // Android 17 Frosted Segmented Navigation Bar
                 item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("engine_mode_card"),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF0F172A).copy(alpha = 0.65f)
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            Brush.linearGradient(
-                                listOf(
-                                    Color(0x35FFFFFF),
-                                    Color(0x10FFFFFF),
-                                    CyberCyan.copy(alpha = 0.25f)
-                                )
-                            )
-                        )
+                    FrostedGlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        backgroundColor = Color(0xFF0F1A2E).copy(alpha = 0.70f),
+                        borderColor = Color.White.copy(alpha = 0.15f)
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "OPERATING ENGINE",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 1.sp
-                                    ),
-                                    color = CyberCyan
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (hasPermission) AdGuardGreen.copy(alpha = 0.18f) else Color(0x2038BDF8),
-                                    border = BorderStroke(
-                                        0.5.dp,
-                                        if (hasPermission) AdGuardGreen.copy(alpha = 0.4f) else Color(0x4038BDF8)
-                                    )
-                                ) {
-                                    Text(
-                                        text = if (hasPermission) "Native DoT Active" else "Setup Available",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (hasPermission) AdGuardGreen else CyberCyan,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Option 1: Native System Private DNS (Priority when granted)
-                                val isSystemSelected = (engineMode == AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS) || hasPermission
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (isSystemSelected) CyberCyan.copy(alpha = 0.15f) else Color(0x20FFFFFF),
-                                    border = BorderStroke(
-                                        if (isSystemSelected) 1.5.dp else 1.dp,
-                                        if (isSystemSelected) CyberCyan else Color(0x1FFFFFFF)
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable { viewModel.setEngineMode(AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS) }
-                                        .testTag("mode_system_dns_button")
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Text(
-                                            text = "⚙️ System DoT",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = if (isSystemSelected) CyberCyan else Color.White
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "Android native TLS (Zero lag)",
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF94A3B8)
-                                        )
-                                    }
-                                }
-
-                                // Option 2: Local Zero-Command Mode
-                                val isLocalSelected = !hasPermission && (engineMode == AppPreferences.ENGINE_LOCAL_DNS)
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (isLocalSelected) AdGuardGreen.copy(alpha = 0.15f) else Color(0x20FFFFFF),
-                                    border = BorderStroke(
-                                        if (isLocalSelected) 1.5.dp else 1.dp,
-                                        if (isLocalSelected) AdGuardGreen else Color(0x1FFFFFFF)
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable { viewModel.setEngineMode(AppPreferences.ENGINE_LOCAL_DNS) }
-                                        .testTag("mode_no_command_button")
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Text(
-                                            text = "⚡ Zero-Command",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = if (isLocalSelected) AdGuardGreen else Color.White
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "100% on phone (No PC)",
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF94A3B8)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Hero Liquid Glass Status Card with Glowing Orb & Toggle
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("hero_status_card"),
-                        shape = RoundedCornerShape(26.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF0F1A2E).copy(alpha = 0.8f)
-                        ),
-                        border = BorderStroke(
-                            1.5.dp,
-                            Brush.linearGradient(
-                                listOf(
-                                    Color(0x55FFFFFF),
-                                    activeAccentColor.copy(alpha = 0.7f),
-                                    Color(0x15FFFFFF)
-                                )
-                            )
-                        )
-                    ) {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(20.dp)
+                                .padding(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    // Liquid Glowing Orb Avatar
-                                    Box(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(RoundedCornerShape(18.dp))
-                                            .background(
-                                                Brush.radialGradient(
-                                                    listOf(
-                                                        activeAccentColor.copy(alpha = 0.35f),
-                                                        Color(0x1AFFFFFF)
-                                                    )
-                                                )
-                                            )
-                                            .padding(2.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = currentProvider.iconRes),
-                                            contentDescription = currentProvider.displayName,
-                                            tint = activeAccentColor,
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(14.dp))
-
-                                    Column {
-                                        Text(
-                                            text = "ACTIVE DNS PROVIDER",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontWeight = FontWeight.SemiBold,
-                                                letterSpacing = 1.sp
-                                            ),
-                                            color = Color(0xFF94A3B8)
-                                        )
-                                        Text(
-                                            text = currentProvider.displayName,
-                                            style = MaterialTheme.typography.titleLarge.copy(
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-
-                                // Status Pill
-                                val isOff = (currentProvider == DnsProvider.OFF)
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isOff) DnsOffGray.copy(alpha = 0.25f) else activeAccentColor.copy(alpha = 0.2f),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (isOff) DnsOffGray.copy(alpha = 0.5f) else activeAccentColor.copy(alpha = 0.8f)
-                                    )
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(7.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isOff) DnsOffGray else activeAccentColor)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = when (currentProvider) {
-                                                DnsProvider.ADGUARD -> "BLOCKING ADS"
-                                                DnsProvider.CLOUDFLARE -> "ZERO LOGS"
-                                                DnsProvider.QUAD9 -> "THREAT SHIELD"
-                                                DnsProvider.AUTOMATIC -> "ISP TLS"
-                                                DnsProvider.OFF -> "DISABLED"
-                                            },
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = if (isOff) Color(0xFF94A3B8) else activeAccentColor
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Liquid Details Strip
+                            // Tab 0: Switcher
+                            val isTab0 = selectedTabIndex == 0
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0x20FFFFFF),
-                                border = BorderStroke(0.5.dp, Color(0x25FFFFFF)),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { selectedTabIndex = 0 }
+                                    .testTag("tab_switcher"),
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isTab0) activeAccentColor.copy(alpha = 0.22f) else Color.Transparent,
+                                border = if (isTab0) BorderStroke(1.dp, activeAccentColor.copy(alpha = 0.6f)) else null
                             ) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 9.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "TLS Hostname:",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF94A3B8)
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = if (isTab0) activeAccentColor else Color(0xFF94A3B8),
+                                        modifier = Modifier.size(16.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (currentProvider.hostname.isNotEmpty()) currentProvider.hostname else "Standard DNS (Port 53)",
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = activeAccentColor
+                                        text = "DNS Control",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isTab0) Color.White else Color(0xFF94A3B8)
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Liquid Glass Primary Toggle Button
-                            Button(
-                                onClick = {
-                                    if (!hasPermission && engineMode == AppPreferences.ENGINE_LOCAL_DNS && !isVpnConsentGranted) {
-                                        requestVpnConsent()
-                                    } else {
-                                        viewModel.toggleNextProvider()
-                                    }
-                                },
+                            // Tab 1: Beginner Guide
+                            val isTab1 = selectedTabIndex == 1
+                            Surface(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(54.dp)
-                                    .testTag("toggle_dns_button"),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = activeAccentColor,
-                                    contentColor = Color(0xFF030816)
-                                )
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { selectedTabIndex = 1 }
+                                    .testTag("tab_guide"),
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isTab1) CyberCyan.copy(alpha = 0.22f) else Color.Transparent,
+                                border = if (isTab1) BorderStroke(1.dp, CyberCyan.copy(alpha = 0.6f)) else null
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.SwapHoriz,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Switch to ${nextProvider.displayName}",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.ExtraBold,
-                                        letterSpacing = 0.5.sp
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HelpOutline,
+                                        contentDescription = null,
+                                        tint = if (isTab1) CyberCyan else Color(0xFF94A3B8),
+                                        modifier = Modifier.size(16.dp)
                                     )
-                                )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Mode Guide",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isTab1) Color.White else Color(0xFF94A3B8)
+                                    )
+                                }
+                            }
+
+                            // Tab 2: Auto Update
+                            val isTab2 = selectedTabIndex == 2
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { selectedTabIndex = 2 }
+                                    .testTag("tab_updates"),
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isTab2) Color(0xFF6366F1).copy(alpha = 0.22f) else Color.Transparent,
+                                border = if (isTab2) BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.6f)) else null
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SystemUpdate,
+                                        contentDescription = null,
+                                        tint = if (isTab2) Color(0xFFA5B4FC) else Color(0xFF94A3B8),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Updates",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isTab2) Color.White else Color(0xFF94A3B8)
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Permission or Local Consent Card
-                if (!hasPermission && engineMode == AppPreferences.ENGINE_LOCAL_DNS) {
+                // TAB 0: PRIMARY DNS CONTROLLER
+                if (selectedTabIndex == 0) {
+                    // Operating Mode Selector (Frosted Glass Quick Selector)
                     item {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("local_vpn_consent_card"),
-                            shape = RoundedCornerShape(20.dp),
+                                .testTag("engine_mode_card"),
+                            shape = RoundedCornerShape(22.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isVpnConsentGranted) Color(0xFF0D251C).copy(alpha = 0.75f) else Color(0xFF101C30).copy(alpha = 0.75f)
+                                containerColor = Color(0xFF0F172A).copy(alpha = 0.65f)
                             ),
                             border = BorderStroke(
                                 1.dp,
-                                if (isVpnConsentGranted) AdGuardGreen.copy(alpha = 0.45f) else CyberCyan.copy(alpha = 0.45f)
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0x35FFFFFF),
+                                        Color(0x10FFFFFF),
+                                        CyberCyan.copy(alpha = 0.25f)
+                                    )
+                                )
                             )
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (isVpnConsentGranted) Icons.Default.CheckCircle else Icons.Default.Bolt,
-                                        contentDescription = null,
-                                        tint = if (isVpnConsentGranted) AdGuardGreen else CyberCyan,
-                                        modifier = Modifier.size(24.dp)
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "OPERATING ENGINE",
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        ),
+                                        color = CyberCyan
                                     )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = if (isVpnConsentGranted) "Zero-Command Mode Active" else "One-Tap Setup (No PC Required)",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = Color.White
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (hasPermission) AdGuardGreen.copy(alpha = 0.18f) else Color(0x2038BDF8),
+                                        border = BorderStroke(
+                                            0.5.dp,
+                                            if (hasPermission) AdGuardGreen.copy(alpha = 0.4f) else Color(0x4038BDF8)
                                         )
+                                    ) {
                                         Text(
-                                            text = if (isVpnConsentGranted) "Ready to switch DNS on device" else "Tap below to allow on-screen permission",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF94A3B8)
+                                            text = if (hasPermission) "Native DoT Active" else "Auto Mode Active",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = if (hasPermission) AdGuardGreen else CyberCyan,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                         )
                                     }
                                 }
 
-                                if (!isVpnConsentGranted) {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = "Android displays an on-screen connection prompt. Tap 'OK' to enable instant DNS switching without any computer or commands.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF94A3B8)
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Button(
-                                        onClick = requestVpnConsent,
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Option 1: Native System Private DNS
+                                    val isSystemSelected = (engineMode == AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS) || hasPermission
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isSystemSelected) CyberCyan.copy(alpha = 0.15f) else Color(0x20FFFFFF),
+                                        border = BorderStroke(
+                                            if (isSystemSelected) 1.5.dp else 1.dp,
+                                            if (isSystemSelected) CyberCyan else Color(0x1FFFFFFF)
+                                        ),
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("grant_vpn_permission_button"),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberCyan,
-                                            contentColor = Color(0xFF030816)
-                                        )
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable { viewModel.setEngineMode(AppPreferences.ENGINE_SYSTEM_PRIVATE_DNS) }
+                                            .testTag("mode_system_dns_button")
                                     ) {
-                                        Text("Grant On-Screen Permission", fontWeight = FontWeight.Bold)
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Text(
+                                                text = "⚙️ System DoT",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = if (isSystemSelected) CyberCyan else Color.White
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Native Android TLS",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF94A3B8)
+                                            )
+                                        }
+                                    }
+
+                                    // Option 2: Local Zero-Command Mode
+                                    val isLocalSelected = !hasPermission && (engineMode == AppPreferences.ENGINE_LOCAL_DNS)
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isLocalSelected) AdGuardGreen.copy(alpha = 0.15f) else Color(0x20FFFFFF),
+                                        border = BorderStroke(
+                                            if (isLocalSelected) 1.5.dp else 1.dp,
+                                            if (isLocalSelected) AdGuardGreen else Color(0x1FFFFFFF)
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable { viewModel.setEngineMode(AppPreferences.ENGINE_LOCAL_DNS) }
+                                            .testTag("mode_no_command_button")
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Text(
+                                                text = "⚡ Zero-Command",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = if (isLocalSelected) AdGuardGreen else Color.White
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "100% on phone (No PC)",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF94A3B8)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                } else {
+
+                    // Hero Frosted Glass Status Card with Glowing Orb & Toggle
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("hero_status_card"),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF0F1A2E).copy(alpha = 0.85f)
+                            ),
+                            border = BorderStroke(
+                                1.5.dp,
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0x55FFFFFF),
+                                        activeAccentColor.copy(alpha = 0.7f),
+                                        Color(0x15FFFFFF)
+                                    )
+                                )
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        // Liquid Glowing Orb Avatar
+                                        Box(
+                                            modifier = Modifier
+                                                .size(56.dp)
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .background(
+                                                    Brush.radialGradient(
+                                                        listOf(
+                                                            activeAccentColor.copy(alpha = 0.35f),
+                                                            Color(0x1AFFFFFF)
+                                                        )
+                                                    )
+                                                )
+                                                .padding(2.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(id = currentProvider.iconRes),
+                                                contentDescription = currentProvider.displayName,
+                                                tint = activeAccentColor,
+                                                modifier = Modifier.size(32.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(14.dp))
+
+                                        Column {
+                                            Text(
+                                                text = "ACTIVE DNS PROVIDER",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    letterSpacing = 1.sp
+                                                ),
+                                                color = Color(0xFF94A3B8)
+                                            )
+                                            Text(
+                                                text = currentProvider.displayName,
+                                                style = MaterialTheme.typography.titleLarge.copy(
+                                                    fontWeight = FontWeight.ExtraBold
+                                                ),
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+
+                                    // Status Pill
+                                    val isOff = (currentProvider == DnsProvider.OFF)
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isOff) DnsOffGray.copy(alpha = 0.25f) else activeAccentColor.copy(alpha = 0.2f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isOff) DnsOffGray.copy(alpha = 0.5f) else activeAccentColor.copy(alpha = 0.8f)
+                                        )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isOff) DnsOffGray else activeAccentColor)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = when (currentProvider) {
+                                                    DnsProvider.ADGUARD -> "BLOCKING ADS"
+                                                    DnsProvider.CLOUDFLARE -> "ZERO LOGS"
+                                                    DnsProvider.QUAD9 -> "THREAT SHIELD"
+                                                    DnsProvider.AUTOMATIC -> "ISP TLS"
+                                                    DnsProvider.OFF -> "DISABLED"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = if (isOff) Color(0xFF94A3B8) else activeAccentColor
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Liquid Details Strip
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0x20FFFFFF),
+                                    border = BorderStroke(0.5.dp, Color(0x25FFFFFF)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "TLS Hostname:",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF94A3B8)
+                                        )
+                                        Text(
+                                            text = if (currentProvider.hostname.isNotEmpty()) currentProvider.hostname else "Standard DNS (Port 53)",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = activeAccentColor
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Primary Toggle Button
+                                Button(
+                                    onClick = {
+                                        if (!hasPermission && engineMode == AppPreferences.ENGINE_LOCAL_DNS && !isVpnConsentGranted) {
+                                            requestVpnConsent()
+                                        } else {
+                                            viewModel.toggleNextProvider()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(54.dp)
+                                        .testTag("toggle_dns_button"),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = activeAccentColor,
+                                        contentColor = Color(0xFF030816)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SwapHoriz,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Switch to ${nextProvider.displayName}",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Permission or Local Consent Card
+                    if (!hasPermission && engineMode == AppPreferences.ENGINE_LOCAL_DNS) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("local_vpn_consent_card"),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isVpnConsentGranted) Color(0xFF0D251C).copy(alpha = 0.75f) else Color(0xFF101C30).copy(alpha = 0.75f)
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isVpnConsentGranted) AdGuardGreen.copy(alpha = 0.45f) else CyberCyan.copy(alpha = 0.45f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (isVpnConsentGranted) Icons.Default.CheckCircle else Icons.Default.Bolt,
+                                            contentDescription = null,
+                                            tint = if (isVpnConsentGranted) AdGuardGreen else CyberCyan,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = if (isVpnConsentGranted) "Zero-Command Mode Active" else "One-Tap Setup (No PC Required)",
+                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                text = if (isVpnConsentGranted) "Ready to switch DNS on device" else "Tap below to allow on-screen permission",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF94A3B8)
+                                            )
+                                        }
+                                    }
+
+                                    if (!isVpnConsentGranted) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Text(
+                                            text = "Android displays an on-screen connection prompt. Tap 'OK' to enable instant DNS switching without any computer or commands.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF94A3B8)
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = requestVpnConsent,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("grant_vpn_permission_button"),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = CyberCyan,
+                                                contentColor = Color(0xFF030816)
+                                            )
+                                        ) {
+                                            Text("Grant On-Screen Permission", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Quick Settings Guide Card
+                    item {
+                        QuickSettingsGuideCard(
+                            isAddTileSupported = viewModel.isAddTileSupported,
+                            onAddTileClick = { viewModel.requestAddTile(context) }
+                        )
+                    }
+
+                    // Providers Section Header
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 4.dp, top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "DNS PROVIDERS",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                ),
+                                color = CyberCyan
+                            )
+                            Text(
+                                text = "Tap to activate directly",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
+
+                    // Individual Provider Cards
+                    items(
+                        count = DnsProvider.values().size,
+                        key = { DnsProvider.values()[it].id }
+                    ) { index ->
+                        val provider = DnsProvider.values()[index]
+                        ProviderCard(
+                            provider = provider,
+                            isActive = provider == currentProvider,
+                            onActivateClick = {
+                                if (!hasPermission && engineMode == AppPreferences.ENGINE_LOCAL_DNS && !isVpnConsentGranted) {
+                                    requestVpnConsent()
+                                } else {
+                                    viewModel.selectProvider(provider)
+                                }
+                            }
+                        )
+                    }
+
+                    // Diagnostics Latency Card
+                    item {
+                        DiagnosticCard(
+                            rawMode = rawMode,
+                            rawSpecifier = rawSpecifier,
+                            lastStatus = lastStatus,
+                            lastTimestamp = lastTimestamp,
+                            diagnosticResult = diagnosticResult,
+                            onRunDiagnostic = { viewModel.runDnsDiagnostic() }
+                        )
+                    }
+                }
+
+                // TAB 1: BEGINNER-FRIENDLY MODE GUIDE
+                if (selectedTabIndex == 1) {
+                    item {
+                        ModeExplainerCard(
+                            currentEngineMode = engineMode,
+                            hasSecurePermission = hasPermission,
+                            onSelectEngineMode = { mode ->
+                                viewModel.setEngineMode(mode)
+                                if (mode == AppPreferences.ENGINE_LOCAL_DNS && !isVpnConsentGranted) {
+                                    requestVpnConsent()
+                                }
+                            },
+                            onOpenSystemSettings = { viewModel.openSystemSettings(context) }
+                        )
+                    }
+
+                    // Permission Status Card for advanced users
                     item {
                         PermissionStatusCard(
                             isGranted = hasPermission,
@@ -641,68 +844,48 @@ fun MainScreen(
                     }
                 }
 
-                // Quick Settings Guide Card
-                item {
-                    QuickSettingsGuideCard(
-                        isAddTileSupported = viewModel.isAddTileSupported,
-                        onAddTileClick = { viewModel.requestAddTile(context) }
-                    )
-                }
-
-                // Providers Section Header
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 4.dp, top = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "DNS PROVIDERS",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = CyberCyan
-                        )
-                        Text(
-                            text = "Tap to activate directly",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8)
+                // TAB 2: IN-APP DIRECT AUTO UPDATER
+                if (selectedTabIndex == 2) {
+                    item {
+                        AppUpdaterCard(
+                            currentVersionName = viewModel.currentVersionName,
+                            currentVersionCode = viewModel.currentVersionCode,
+                            updateStatus = updateStatus,
+                            onCheckForUpdates = { viewModel.checkForUpdates() },
+                            onDownloadUpdate = { info -> viewModel.downloadUpdate(info) },
+                            onInstallUpdate = { file -> viewModel.installUpdate(file) },
+                            onTriggerSimulatedUpdate = { viewModel.triggerSimulatedUpdate() },
+                            onSaveCustomUpdateUrl = { url -> viewModel.saveCustomUpdateUrl(url) },
+                            currentCustomUpdateUrl = customUpdateUrl
                         )
                     }
-                }
 
-                // Individual Provider Cards (Liquid Glass cards)
-                items(
-                    count = DnsProvider.values().size,
-                    key = { DnsProvider.values()[it].id }
-                ) { index ->
-                    val provider = DnsProvider.values()[index]
-                    ProviderCard(
-                        provider = provider,
-                        isActive = provider == currentProvider,
-                        onActivateClick = {
-                            if (!hasPermission && engineMode == AppPreferences.ENGINE_LOCAL_DNS && !isVpnConsentGranted) {
-                                requestVpnConsent()
-                            } else {
-                                viewModel.selectProvider(provider)
+                    item {
+                        FrostedGlassCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            backgroundColor = Color(0xFF0F172A).copy(alpha = 0.70f)
+                        ) {
+                            Column(modifier = Modifier.padding(18.dp)) {
+                                Text(
+                                    text = "ABOUT DIRECT UPDATES",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp
+                                    ),
+                                    color = CyberCyan
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "When you share this APK with friends, they can keep it updated simply by tapping 'Check for Updates' inside this screen.\n\n" +
+                                            "• Package Installer: The app downloads the new APK into its secure cache and hands it directly to Android's installer.\n" +
+                                            "• Zero Re-configurations: All your DNS preferences and Quick Settings tile configurations remain intact after updating.",
+                                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                                    color = Color(0xFFCBD5E1)
+                                )
                             }
                         }
-                    )
-                }
-
-                // Diagnostics Telemetry Card (tests latency and verifies ad blocking)
-                item {
-                    DiagnosticCard(
-                        rawMode = rawMode,
-                        rawSpecifier = rawSpecifier,
-                        lastStatus = lastStatus,
-                        lastTimestamp = lastTimestamp,
-                        diagnosticResult = diagnosticResult,
-                        onRunDiagnostic = { viewModel.runDnsDiagnostic() }
-                    )
+                    }
                 }
 
                 item { Spacer(modifier = Modifier.height(32.dp)) }

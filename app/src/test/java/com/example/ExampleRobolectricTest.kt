@@ -2,16 +2,29 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.BuildConfig
+import com.example.MainActivity
 import com.example.data.AppPreferences
+import com.example.data.DnsDiagnosticResult
 import com.example.data.DnsProvider
+import com.example.manager.DnsDiagnosticRunner
 import com.example.manager.DnsManager
+import com.example.manager.PrivateDnsHelper
+import com.example.model.DnsProfile
+import com.example.service.DnsTileService
+import com.example.updater.AppUpdateManager
+import com.example.updater.UpdateStatus
+import com.example.vpn.DnsPacketParser
+import com.example.vpn.DnsVpnService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -89,15 +102,15 @@ class ExampleRobolectricTest {
 
     @Test
     fun `verify hostname normalization handles URLs and IPs`() {
-        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("1.1.1.1"))
-        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("one.one.one.one"))
-        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("cloudflare"))
-        assertEquals("one.one.one.one", com.example.manager.PrivateDnsHelper.normalizeHostname("cloud fare 1.1.1.1"))
-        assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("adguard"))
-        assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("dns.adguard.com"))
-        assertEquals("dns.adguard.com", com.example.manager.PrivateDnsHelper.normalizeHostname("https://dns.adguard.com/dns-query"))
-        assertEquals("dns.quad9.net", com.example.manager.PrivateDnsHelper.normalizeHostname("dns.quad9.net:853"))
-        assertEquals("dns.quad9.net", com.example.manager.PrivateDnsHelper.normalizeHostname("9.9.9.9"))
+        assertEquals("one.one.one.one", PrivateDnsHelper.normalizeHostname("1.1.1.1"))
+        assertEquals("one.one.one.one", PrivateDnsHelper.normalizeHostname("one.one.one.one"))
+        assertEquals("one.one.one.one", PrivateDnsHelper.normalizeHostname("cloudflare"))
+        assertEquals("one.one.one.one", PrivateDnsHelper.normalizeHostname("cloud fare 1.1.1.1"))
+        assertEquals("dns.adguard.com", PrivateDnsHelper.normalizeHostname("adguard"))
+        assertEquals("dns.adguard.com", PrivateDnsHelper.normalizeHostname("dns.adguard.com"))
+        assertEquals("dns.adguard.com", PrivateDnsHelper.normalizeHostname("https://dns.adguard.com/dns-query"))
+        assertEquals("dns.quad9.net", PrivateDnsHelper.normalizeHostname("dns.quad9.net:853"))
+        assertEquals("dns.quad9.net", PrivateDnsHelper.normalizeHostname("9.9.9.9"))
     }
 
     @Test
@@ -112,60 +125,60 @@ class ExampleRobolectricTest {
 
     @Test
     fun `verify PrivateDnsHelper constants and config model`() {
-        assertEquals("private_dns_mode", com.example.manager.PrivateDnsHelper.PRIVATE_DNS_MODE)
-        assertEquals("private_dns_specifier", com.example.manager.PrivateDnsHelper.PRIVATE_DNS_SPECIFIER)
-        assertEquals("off", com.example.manager.PrivateDnsHelper.MODE_OFF)
-        assertEquals("opportunistic", com.example.manager.PrivateDnsHelper.MODE_OPPORTUNISTIC)
-        assertEquals("hostname", com.example.manager.PrivateDnsHelper.MODE_PROVIDER_HOSTNAME)
+        assertEquals("private_dns_mode", PrivateDnsHelper.PRIVATE_DNS_MODE)
+        assertEquals("private_dns_specifier", PrivateDnsHelper.PRIVATE_DNS_SPECIFIER)
+        assertEquals("off", PrivateDnsHelper.MODE_OFF)
+        assertEquals("opportunistic", PrivateDnsHelper.MODE_OPPORTUNISTIC)
+        assertEquals("hostname", PrivateDnsHelper.MODE_PROVIDER_HOSTNAME)
 
-        val offConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("off", "")
+        val offConfig = PrivateDnsHelper.PrivateDnsConfig("off", "")
         assertTrue(offConfig.isOff)
         assertEquals("DNS Off", offConfig.providerName)
 
-        val autoConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("opportunistic", "")
+        val autoConfig = PrivateDnsHelper.PrivateDnsConfig("opportunistic", "")
         assertTrue(autoConfig.isOpportunistic)
         assertEquals("Automatic", autoConfig.providerName)
 
-        val adguardConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("hostname", "dns.adguard-dns.com")
+        val adguardConfig = PrivateDnsHelper.PrivateDnsConfig("hostname", "dns.adguard-dns.com")
         assertTrue(adguardConfig.isHostnameMode)
         assertEquals("AdGuard DNS", adguardConfig.providerName)
 
-        val cloudflareConfig = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("hostname", "one.one.one.one")
+        val cloudflareConfig = PrivateDnsHelper.PrivateDnsConfig("hostname", "one.one.one.one")
         assertTrue(cloudflareConfig.isHostnameMode)
         assertEquals("Cloudflare DNS", cloudflareConfig.providerName)
 
-        val quad9Config = com.example.manager.PrivateDnsHelper.PrivateDnsConfig("hostname", "dns.quad9.net")
+        val quad9Config = PrivateDnsHelper.PrivateDnsConfig("hostname", "dns.quad9.net")
         assertTrue(quad9Config.isHostnameMode)
         assertEquals("Quad9 DNS", quad9Config.providerName)
     }
 
     @Test
     fun `verify MainActivity launches without crash`() {
-        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         assertNotNull(controller.get())
     }
 
     @Test
     fun `verify DnsDiagnosticRunner resolves localhost successfully`() = kotlinx.coroutines.runBlocking {
-        val result = com.example.manager.DnsDiagnosticRunner.testDnsResolution(
+        val result = DnsDiagnosticRunner.testDnsResolution(
             targetDomain = "localhost",
             maxRetries = 1
         )
-        assertTrue(result is com.example.data.DnsDiagnosticResult.Success)
-        val success = result as com.example.data.DnsDiagnosticResult.Success
+        assertTrue(result is DnsDiagnosticResult.Success)
+        val success = result as DnsDiagnosticResult.Success
         assertEquals("localhost", success.targetHost)
         assertTrue(success.latencyMs >= 0)
     }
 
     @Test
     fun `verify DnsDiagnosticRunner handles resolution failure gracefully`() = kotlinx.coroutines.runBlocking {
-        val result = com.example.manager.DnsDiagnosticRunner.testDnsResolution(
+        val result = DnsDiagnosticRunner.testDnsResolution(
             targetDomain = "invalid.domain.that.does.not.exist.test",
             maxRetries = 1,
             retryDelayMs = 10
         )
-        assertTrue(result is com.example.data.DnsDiagnosticResult.Failure)
-        val failure = result as com.example.data.DnsDiagnosticResult.Failure
+        assertTrue(result is DnsDiagnosticResult.Failure)
+        val failure = result as DnsDiagnosticResult.Failure
         assertEquals("invalid.domain.that.does.not.exist.test", failure.targetHost)
         assertTrue(failure.errorMessage.isNotEmpty())
     }
@@ -192,7 +205,7 @@ class ExampleRobolectricTest {
         // DNS Payload
         System.arraycopy(queryDnsPayload, 0, rawIpv4Packet, 28, queryDnsPayload.size)
 
-        val query = com.example.vpn.DnsPacketParser.parseUdpDnsQuery(rawIpv4Packet, rawIpv4Packet.size)
+        val query = DnsPacketParser.parseUdpDnsQuery(rawIpv4Packet, rawIpv4Packet.size)
         assertNotNull(query)
         assertEquals(false, query?.isIpv6)
         assertEquals(12345, query?.sourcePort)
@@ -200,7 +213,7 @@ class ExampleRobolectricTest {
 
         // Simulate DoH response where server returned ID 0x0000 (RFC 8484 standard behavior)
         val dohResponsePayload = byteArrayOf(0x00, 0x00, 0x81.toByte(), 0x80.toByte(), 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00)
-        val responsePacket = com.example.vpn.DnsPacketParser.buildUdpDnsResponse(query!!, dohResponsePayload)
+        val responsePacket = DnsPacketParser.buildUdpDnsResponse(query!!, dohResponsePayload)
 
         assertTrue(responsePacket.size > 28)
         // Check destination IP in response matches original source IP
@@ -240,14 +253,14 @@ class ExampleRobolectricTest {
         // DNS Payload
         System.arraycopy(queryDnsPayload, 0, rawIpv6Packet, 48, queryDnsPayload.size)
 
-        val query = com.example.vpn.DnsPacketParser.parseUdpDnsQuery(rawIpv6Packet, rawIpv6Packet.size)
+        val query = DnsPacketParser.parseUdpDnsQuery(rawIpv6Packet, rawIpv6Packet.size)
         assertNotNull(query)
         assertEquals(true, query?.isIpv6)
         assertEquals(54321, query?.sourcePort)
         assertEquals(53, query?.destPort)
 
         val dohResponsePayload = byteArrayOf(0x00, 0x00, 0x81.toByte(), 0x80.toByte(), 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00)
-        val responsePacket = com.example.vpn.DnsPacketParser.buildUdpDnsResponse(query!!, dohResponsePayload)
+        val responsePacket = DnsPacketParser.buildUdpDnsResponse(query!!, dohResponsePayload)
 
         assertTrue(responsePacket.size >= 48)
         // IPv6 version 6
@@ -263,30 +276,61 @@ class ExampleRobolectricTest {
     @Test
     fun `verify DnsVpnService dual-stack IPv4 and IPv6 network prefix configurations`() {
         // IPv4 Dual-Stack configuration constants
-        assertEquals("10.111.222.10", com.example.vpn.DnsVpnService.TUN_INTERFACE_IPV4)
-        assertEquals("10.111.222.1", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IP)
-        assertEquals("10.111.222.0", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_SUBNET)
-        assertEquals(24, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_PREFIX)
-        assertEquals(32, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV4_ROUTE_PREFIX)
+        assertEquals("10.111.222.10", DnsVpnService.TUN_INTERFACE_IPV4)
+        assertEquals("10.111.222.1", DnsVpnService.VIRTUAL_DNS_IP)
+        assertEquals("10.111.222.0", DnsVpnService.VIRTUAL_DNS_IPV4_SUBNET)
+        assertEquals(24, DnsVpnService.VIRTUAL_DNS_IPV4_PREFIX)
+        assertEquals(32, DnsVpnService.VIRTUAL_DNS_IPV4_ROUTE_PREFIX)
 
         // IPv6 Dual-Stack configuration constants
-        assertEquals("fd00:1:fd00:1::10", com.example.vpn.DnsVpnService.TUN_INTERFACE_IPV6)
-        assertEquals("fd00:1:fd00:1::1", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6)
-        assertEquals("fd00:1:fd00:1::", com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_SUBNET)
-        assertEquals(64, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_PREFIX)
-        assertEquals(64, com.example.vpn.DnsVpnService.VIRTUAL_DNS_IPV6_ROUTE_PREFIX)
+        assertEquals("fd00:1:fd00:1::10", DnsVpnService.TUN_INTERFACE_IPV6)
+        assertEquals("fd00:1:fd00:1::1", DnsVpnService.VIRTUAL_DNS_IPV6)
+        assertEquals("fd00:1:fd00:1::", DnsVpnService.VIRTUAL_DNS_IPV6_SUBNET)
+        assertEquals(64, DnsVpnService.VIRTUAL_DNS_IPV6_PREFIX)
+        assertEquals(64, DnsVpnService.VIRTUAL_DNS_IPV6_ROUTE_PREFIX)
     }
 
     @Test
     fun `verify AdGuard DoH URL uses official dns-query endpoint`() {
-        assertEquals("https://dns.adguard-dns.com/dns-query", com.example.model.DnsProfile.ADGUARD.dohUrl)
-        assertEquals("https://cloudflare-dns.com/dns-query", com.example.model.DnsProfile.CLOUDFLARE.dohUrl)
-        assertEquals("https://dns.quad9.net/dns-query", com.example.model.DnsProfile.QUAD9.dohUrl)
+        assertEquals("https://dns.adguard-dns.com/dns-query", DnsProfile.ADGUARD.dohUrl)
+        assertEquals("https://cloudflare-dns.com/dns-query", DnsProfile.CLOUDFLARE.dohUrl)
+        assertEquals("https://dns.quad9.net/dns-query", DnsProfile.QUAD9.dohUrl)
     }
 
     @Test
     fun `verify DnsTileService requestTileUpdate runs without exception`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        com.example.service.DnsTileService.requestTileUpdate(context)
+        DnsTileService.requestTileUpdate(context)
+    }
+
+    @Test
+    fun `verify AppUpdateManager version and simulated update`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val updateManager = AppUpdateManager(context)
+        assertEquals(BuildConfig.VERSION_CODE, updateManager.currentVersionCode)
+        assertEquals(BuildConfig.VERSION_NAME, updateManager.currentVersionName)
+
+        assertEquals(UpdateStatus.Idle, updateManager.updateStatus.value)
+
+        updateManager.triggerSimulatedUpdate("1.2")
+        val status = updateManager.updateStatus.value
+        assertTrue(status is UpdateStatus.Available)
+        val available = status as UpdateStatus.Available
+        assertEquals("1.2", available.updateInfo.versionName)
+        assertTrue(available.updateInfo.versionCode > updateManager.currentVersionCode)
+
+        // Install result for non-existent file returns FileNotFound
+        val fakeFile = File(context.cacheDir, "non_existent_update.apk")
+        val installResult = updateManager.installApk(fakeFile)
+        assertEquals(AppUpdateManager.InstallResult.FileNotFound, installResult)
+    }
+
+    @Test
+    fun `verify customUpdateUrl preference persistence`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = AppPreferences.getInstance(context)
+        prefs.customUpdateUrl = "https://custom.myhost.com/version.json"
+        assertEquals("https://custom.myhost.com/version.json", prefs.customUpdateUrl)
+        prefs.customUpdateUrl = ""
     }
 }

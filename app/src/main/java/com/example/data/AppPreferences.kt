@@ -41,6 +41,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_ACTIVE_LOCAL_PROVIDER_ID, DnsProvider.ADGUARD.id) ?: DnsProvider.ADGUARD.id
         set(value) = prefs.edit().putString(KEY_ACTIVE_LOCAL_PROVIDER_ID, value).apply()
 
+    var customUpdateUrl: String
+        get() = prefs.getString(KEY_CUSTOM_UPDATE_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_CUSTOM_UPDATE_URL, value).apply()
+
     fun recordSwitchSuccess(provider: DnsProvider) {
         prefs.edit()
             .putString(KEY_LAST_PROVIDER, provider.displayName)
@@ -68,6 +72,7 @@ class AppPreferences(context: Context) {
         const val KEY_LAST_TIMESTAMP = "key_last_timestamp"
         const val KEY_LAST_ERROR = "key_last_error"
         const val KEY_ACTIVE_LOCAL_PROVIDER_ID = "key_active_local_provider_id"
+        const val KEY_CUSTOM_UPDATE_URL = "key_custom_update_url"
 
         // Engine modes:
         // ENGINE_LOCAL_DNS: Zero command execution, uses native Android VPN permission (1-click on screen)
