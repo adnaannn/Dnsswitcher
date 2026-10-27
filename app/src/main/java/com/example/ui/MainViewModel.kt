@@ -77,15 +77,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _customUpdateUrl = MutableStateFlow(prefs.customUpdateUrl)
     val customUpdateUrl: StateFlow<String> = _customUpdateUrl.asStateFlow()
 
-    private val _isBatteryOptimizationIgnored = MutableStateFlow(
-        com.example.manager.BatteryOptimizationHelper.isBatteryOptimizationIgnored(application)
-    )
-    val isBatteryOptimizationIgnored: StateFlow<Boolean> = _isBatteryOptimizationIgnored.asStateFlow()
-
-    private val _showBatteryOptimizationDialog = MutableStateFlow(
-        com.example.manager.BatteryOptimizationHelper.shouldPromptForBatteryOptimization(application)
-    )
-    val showBatteryOptimizationDialog: StateFlow<Boolean> = _showBatteryOptimizationDialog.asStateFlow()
 
     val adbCommand: String
         get() = DnsManager.getAdbCommand(getApplication())
@@ -131,7 +122,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _lastStatus.value = prefs.lastSwitchStatus
         _lastTimestamp.value = prefs.lastSwitchTimestamp
         _lastError.value = prefs.lastSwitchError
-        _isBatteryOptimizationIgnored.value = com.example.manager.BatteryOptimizationHelper.isBatteryOptimizationIgnored(context)
     }
 
     fun setEngineMode(mode: String) {
@@ -297,25 +287,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveCustomUpdateUrl(url: String) {
         prefs.customUpdateUrl = url
         _customUpdateUrl.value = url
-    }
-
-    fun requestIgnoreBatteryOptimization() {
-        val context = getApplication<Application>()
-        com.example.manager.BatteryOptimizationHelper.requestIgnoreBatteryOptimization(context)
-        _showBatteryOptimizationDialog.value = false
-        refreshState()
-    }
-
-    fun dismissBatteryOptimizationDialog(permanent: Boolean) {
-        val context = getApplication<Application>()
-        if (permanent) {
-            com.example.manager.BatteryOptimizationHelper.dismissPrompt(context)
-        }
-        _showBatteryOptimizationDialog.value = false
-    }
-
-    fun promptBatteryOptimization() {
-        _showBatteryOptimizationDialog.value = true
     }
 }
 
