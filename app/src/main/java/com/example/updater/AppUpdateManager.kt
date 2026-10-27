@@ -64,28 +64,73 @@ class AppUpdateManager(private val context: Context) {
     suspend fun checkForUpdates(customManifestUrl: String? = null): UpdateStatus = withContext(Dispatchers.IO) {
         _updateStatus.value = UpdateStatus.Checking
 
-        val manifestUrl = customManifestUrl
-            ?: prefs.customUpdateUrl.takeIf { it.isNotBlank() }
-            ?: DEFAULT_UPDATE_MANIFEST_URL
+        val resolvedUrl = resolveUpdateUrl(
+            customManifestUrl
+                ?: prefs.customUpdateUrl.takeIf { it.isNotBlank() }
+                ?: DEFAULT_UPDATE_MANIFEST_URL
+        )
 
         try {
-            // Attempt remote check
             val request = Request.Builder()
-                .url(manifestUrl)
+                .url(resolvedUrl)
                 .header("User-Agent", "DNS-Switcher-Android/${BuildConfig.VERSION_NAME}")
+                .header("Accept", "application/vnd.github.v3+json, application/json")
                 .build()
 
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 val jsonBody = response.body?.string() ?: ""
                 val json = JSONObject(jsonBody)
+
+                // Case 1: GitHub Releases API format
+                if (json.has("tag_name") && json.has("assets")) {
+                    val rawTagName = json.optString("tag_name", "")
+                    val remoteVersionName = rawTagName.removePrefix("v").removePrefix("V")
+                    val changelog = json.optString("body", "• New features and performance improvements.")
+                    val assets = json.optJSONArray("assets")
+                    var downloadUrl = ""
+                    var sizeBytes = 0L
+
+                    if (assets != null) {
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(i)
+                            val assetName = asset.optString("name", "")
+                            if (assetName.endsWith(".apk", ignoreCase = true)) {
+                                downloadUrl = asset.optString("browser_download_url", "")
+                                sizeBytes = asset.optLong("size", 0L)
+                                break
+                            }
+                        }
+                    }
+
+                    val isNewer = isVersionNewer(remoteVersionName, currentVersionName)
+                    if (isNewer && downloadUrl.isNotBlank()) {
+                        val info = UpdateInfo(
+                            versionCode = currentVersionCode + 1,
+                            versionName = remoteVersionName,
+                            downloadUrl = downloadUrl,
+                            changelog = changelog,
+                            sizeBytes = sizeBytes
+                        )
+                        val status = UpdateStatus.Available(info)
+                        _updateStatus.value = status
+                        return@withContext status
+                    } else {
+                        val status = UpdateStatus.UpToDate(currentVersionName, currentVersionCode)
+                        _updateStatus.value = status
+                        return@withContext status
+                    }
+                }
+
+                // Case 2: Standard JSON manifest format
                 val remoteVersionCode = json.optInt("versionCode", currentVersionCode)
                 val remoteVersionName = json.optString("versionName", currentVersionName)
                 val downloadUrl = json.optString("downloadUrl", "")
                 val changelog = json.optString("changelog", "Bug fixes, performance improvements, and network engine stability enhancements.")
                 val sizeBytes = json.optLong("sizeBytes", 0L)
 
-                if (remoteVersionCode > currentVersionCode && downloadUrl.isNotBlank()) {
+                val isNewer = remoteVersionCode > currentVersionCode || isVersionNewer(remoteVersionName, currentVersionName)
+                if (isNewer && downloadUrl.isNotBlank()) {
                     val info = UpdateInfo(
                         versionCode = remoteVersionCode,
                         versionName = remoteVersionName,
@@ -102,17 +147,16 @@ class AppUpdateManager(private val context: Context) {
                     return@withContext status
                 }
             } else {
-                // Remote check returned non-200. Provide friendly fallback state
                 val status = UpdateStatus.UpToDate(currentVersionName, currentVersionCode)
                 _updateStatus.value = status
                 return@withContext status
             }
         } catch (e: Exception) {
-            // If offline or custom URL not yet populated, present up-to-date or actionable state
             val status = UpdateStatus.UpToDate(currentVersionName, currentVersionCode)
             _updateStatus.value = status
             return@withContext status
         }
+
     }
 
     /**
@@ -259,5 +303,44 @@ class AppUpdateManager(private val context: Context) {
 
     companion object {
         const val DEFAULT_UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/adnanmd/dns-switcher/main/version.json"
+
+        /**
+         * Converts standard GitHub repo links into the direct GitHub releases API endpoint:
+         * https://github.com/owner/repo -> https://api.github.com/repos/owner/repo/releases/latest
+         */
+        fun resolveUpdateUrl(inputUrl: String): String {
+            val trimmed = inputUrl.trim()
+            if (trimmed.startsWith("https://github.com/") && !trimmed.contains("/releases/download/")) {
+                val parts = trimmed.removePrefix("https://github.com/").removeSuffix("/").split("/")
+                if (parts.size >= 2) {
+                    val owner = parts[0]
+                    val repo = parts[1]
+                    return "https://api.github.com/repos/$owner/$repo/releases/latest"
+                }
+            } else if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && trimmed.contains("/")) {
+                val parts = trimmed.split("/")
+                if (parts.size == 2) {
+                    return "https://api.github.com/repos/${parts[0]}/${parts[1]}/releases/latest"
+                }
+            }
+            return trimmed
+        }
+
+        /**
+         * Compares semantic version strings (e.g., "1.1" vs "1.0", "2.0.1" vs "2.0.0").
+         */
+        fun isVersionNewer(remote: String, current: String): Boolean {
+            val remoteParts = remote.trim().removePrefix("v").removePrefix("V").split(".").mapNotNull { it.toIntOrNull() }
+            val currentParts = current.trim().removePrefix("v").removePrefix("V").split(".").mapNotNull { it.toIntOrNull() }
+            val length = maxOf(remoteParts.size, currentParts.size)
+            for (i in 0 until length) {
+                val r = remoteParts.getOrElse(i) { 0 }
+                val c = currentParts.getOrElse(i) { 0 }
+                if (r > c) return true
+                if (r < c) return false
+            }
+            return false
+        }
     }
 }
+

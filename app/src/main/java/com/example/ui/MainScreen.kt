@@ -84,6 +84,8 @@ import com.example.ui.components.PermissionStatusCard
 import com.example.ui.components.ProviderCard
 import com.example.ui.components.QuickSettingsGuideCard
 import com.example.ui.components.SettingsSheet
+import com.example.ui.components.UpdateAvailableDialog
+import com.example.updater.UpdateStatus
 import com.example.ui.theme.AdGuardGreen
 import com.example.ui.theme.AutomaticBlue
 import com.example.ui.theme.CloudflareOrange
@@ -114,6 +116,7 @@ fun MainScreen(
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var showUpdatePopup by remember { mutableStateOf(true) }
 
     // Launcher for standard on-screen Android VPN permission dialog
     val vpnConsentLauncher = rememberLauncherForActivityResult(
@@ -902,4 +905,15 @@ fun MainScreen(
             onDismiss = { showSettingsSheet = false }
         )
     }
+
+    if (showUpdatePopup) {
+        UpdateAvailableDialog(
+            updateStatus = updateStatus,
+            currentVersionName = viewModel.currentVersionName,
+            onDownloadClick = { info -> viewModel.downloadUpdate(info) },
+            onInstallClick = { file -> viewModel.installUpdate(file) },
+            onDismiss = { showUpdatePopup = false }
+        )
+    }
 }
+

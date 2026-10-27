@@ -333,4 +333,25 @@ class ExampleRobolectricTest {
         assertEquals("https://custom.myhost.com/version.json", prefs.customUpdateUrl)
         prefs.customUpdateUrl = ""
     }
+
+    @Test
+    fun `verify resolveUpdateUrl converts GitHub repo link to releases API`() {
+        val githubRepoUrl = "https://github.com/adnanmd012/dns-switcher"
+        val resolved = AppUpdateManager.resolveUpdateUrl(githubRepoUrl)
+        assertEquals("https://api.github.com/repos/adnanmd012/dns-switcher/releases/latest", resolved)
+
+        val directApiUrl = "https://api.github.com/repos/adnanmd012/dns-switcher/releases/latest"
+        assertEquals(directApiUrl, AppUpdateManager.resolveUpdateUrl(directApiUrl))
+    }
+
+    @Test
+    fun `verify isVersionNewer semantic version comparison`() {
+        assertTrue(AppUpdateManager.isVersionNewer("1.1", "1.0"))
+        assertTrue(AppUpdateManager.isVersionNewer("v1.2", "1.1"))
+        assertTrue(AppUpdateManager.isVersionNewer("2.0.0", "1.9.9"))
+        assertTrue(AppUpdateManager.isVersionNewer("1.0.1", "1.0.0"))
+        org.junit.Assert.assertFalse(AppUpdateManager.isVersionNewer("1.0", "1.0"))
+        org.junit.Assert.assertFalse(AppUpdateManager.isVersionNewer("1.0", "1.1"))
+    }
 }
+
